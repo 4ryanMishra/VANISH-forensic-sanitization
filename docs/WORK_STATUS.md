@@ -1,20 +1,23 @@
 # Current Work Status
 
-## Agent A (Device, Policy, Sanitization, Verification, Attestation)
-- **Status:** Initialized
-- **Working on:** Root repository initialization & shared contract models
+## Agent A (Aryan Mishra)
+- **Status:** Active — Repository Initialized & Scoped
+- **Role:** Device / Platform / Policy / Sanitization / Deletion / Verification / Audit & Attestation
 - **Branch:** main
+- **Hardware Targets:**
+  - Physical: 16 GB SanDisk USB flash drive (HostBlockOverwrite, file deletion vs sanitization demo)
+  - Simulated: Enterprise NVMe SSD & Virtual Disk Images (real ATA/NVMe Sanitize command layer executed against simulated target)
+  - Host System: Write-locked & protected by invariant safety gates
 - **Blocked by:** None
-- **Next:** Implement device discovery & simulation adapters
+- **Next:** Implement Linux & Windows device discovery adapters and NVMe/ATA sanitize command construction layer
 
-## Agent B (Forensic Acquisition, Filesystem, Carving, Reconstruction)
-- **Status:** Initialized
-- **Working on:** Root repository initialization & shared contract models
+## Agent B (Subodeep Mallick)
+- **Status:** Ready
+- **Role:** Forensic Acquisition / Filesystem Analysis / Signature Carving / Fragmented Reconstruction / Validation
 - **Branch:** main
 - **Blocked by:** None
-- **Next:** Implement virtual disk image reader & signature scanner
+- **Next:** Implement virtual disk raw reader and JPEG/PDF signature carver
 
 ## Shared
-- **Current integration target:** Shared contract models (`src-tauri/src/common/` and `src/types/index.ts`)
-- **Contract changes:** None (Baseline frozen per `docs/06_API_CONTRACTS.md`)
+- **Contracts:** Frozen in `src-tauri/src/common/` and `src/types/index.ts` (aligned with `docs/06_API_CONTRACTS.md`)
 - **Known conflicts:** None

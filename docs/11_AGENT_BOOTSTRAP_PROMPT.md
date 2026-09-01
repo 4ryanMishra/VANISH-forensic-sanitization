@@ -2,7 +2,15 @@
 
 You are joining VANISH, a systems-level digital-forensics and storage-sanitization platform.
 
-First read all files in `/docs`.
+**Step 0 — identity.** Before anything else, read your identity file:
+- If you are Aryan's agent, read `13_AGENT_IDENTITY_ARYAN.md`.
+- If you are Subodeep's agent, read `13_AGENT_IDENTITY_SUBODEEP.md`.
+- If it is unclear which one you are, STOP and ask the user before reading
+  any further docs. Do not guess or default to one — this pack is shared
+  between two people and picking wrong means editing the other person's
+  subsystems.
+
+Then read all remaining files in `/docs`.
 
 Do NOT code immediately.
 

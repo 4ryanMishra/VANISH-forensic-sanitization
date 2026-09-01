@@ -46,26 +46,34 @@ explicitly forbids ("do not invent device capabilities").
   and inspect chips (that's literally what the Wei et al. FAST'11 paper
   had to do to verify anything at that level)
 
-## SSD/NVMe-specific sanitization: simulation only
+## SSD/NVMe-specific sanitization: real command layer, simulated target
 
 Per the existing execution modes in `01_MASTER_ENGINEERING_SPEC.md` §5,
-build and demo the SSD/NVMe capability-discovery → command-selection →
-execution-adapter path entirely in **Simulation mode** against mocked
-device capability profiles (e.g., a mock device object that reports
-`supports_nvme_sanitize: true`). This is not a downgrade — it's the
-correct way to demonstrate capability-aware policy selection without
-hardware you don't have, and it's honest about what's simulated vs. real,
-which is exactly what `05_AGENT_RULES.md` and `09_DEMO_WORKFLOW.md` require
-("clearly label simulations," "never improvise commands during a
-demonstration").
+build the actual NVMe/SSD hardware sanitize command layer in full: ATA
+`SECURITY ERASE UNIT` / `SANITIZE DEVICE` subcommands, NVMe `Format NVM` /
+`Sanitize` (Crypto Erase / Block Erase / Overwrite), capability discovery,
+and policy selection between them. This is real, tested code — it is your
+main technical differentiator and should not be stubbed out.
+
+What's simulated is the *target device*, not the command logic: run this
+layer in Simulation mode against a mocked device object (e.g. one that
+reports `supports_nvme_sanitize: true` and returns a plausible completion
+status), because no physical NVMe/SSD is available to issue these commands
+against for real. This is a normal, defensible engineering position —
+driver-level code is routinely validated against simulators before
+hardware access — and it's consistent with `05_AGENT_RULES.md`'s
+"clearly label simulations" and "do not invent device capabilities" rules:
+the capability is real code, the device reporting that capability is mocked,
+and both facts should be visible in the UI/demo, not blurred together.
 
 For the pitch/demo narrative: present the SanDisk run as the real,
 end-to-end proof (delete → recover → sanitize-via-overwrite →
-re-attempt-recovery → audit/cert), and present the NVMe/SSD Sanitize path
-as an architected-and-simulated capability, explicitly labeled as such on
-screen. Judges respond better to "here's what's real and here's what's
-architected for hardware we don't have access to" than to an implied claim
-that gets caught under questioning.
+re-attempt-recovery → audit/cert). Then show the NVMe/SSD Sanitize command
+layer running live against the simulated target — same real code path,
+clearly labeled as a simulated device — as your standout technical depth.
+Say plainly on screen which part is physical and which is simulated;
+judges respond far better to precise honesty about scope than to an
+implied claim that gets caught under questioning.
 
 ## Boot environment
 

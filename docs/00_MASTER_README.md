@@ -37,3 +37,8 @@ this does and doesn't change about scope.
 
 Read `01_MASTER_ENGINEERING_SPEC.md` before implementation. Read
 `12_ATTESTATION_SPEC.md` before implementing the audit/signing module.
+
+**If you are an Antigravity agent starting fresh:** read
+`13_AGENT_IDENTITY_ARYAN.md` or `13_AGENT_IDENTITY_SUBODEEP.md` first,
+whichever matches who you're working for. Do not proceed without knowing
+which one you are.

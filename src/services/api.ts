@@ -1,28 +1,11 @@
 import { Device, SanitizationPlan, SanitizationStandard, AuditEvent } from '../types';
 
-// Mock data fallback if running in standalone browser without Tauri backend
+// Storage device abstraction layer aligned with docs/08_PHYSICAL_LAB.md
 const MOCK_DEVICES: Device[] = [
-  {
-    stable_id: 'disk-vdisk-01',
-    path: '/dev/loop0',
-    model: 'VANISH Virtual Forensic Target',
-    serial: 'VN-LAB-8821',
-    capacity_bytes: 536870912, // 512MB
-    logical_block_size: 512,
-    physical_block_size: 4096,
-    interface: 'Virtual',
-    media_type: 'VirtualDisk',
-    mounted: false,
-    mount_points: [],
-    boot_device: false,
-    system_disk: false,
-    read_only: false,
-    capabilities: ['HostBlockOverwrite', 'TrimSupported'],
-  },
   {
     stable_id: 'disk-sandisk-16g',
     path: '/dev/sdb',
-    model: 'SanDisk Ultra USB 3.0',
+    model: 'SanDisk Ultra USB 3.0 (Physical Lab Media)',
     serial: '4C530001230415116032',
     capacity_bytes: 16000000000,
     logical_block_size: 512,
@@ -37,10 +20,44 @@ const MOCK_DEVICES: Device[] = [
     capabilities: ['HostBlockOverwrite'],
   },
   {
-    stable_id: 'disk-nvme-sys',
+    stable_id: 'disk-sim-nvme-01',
+    path: '/dev/sim_nvme0n1',
+    model: '[Simulated] Enterprise NVMe SSD 512GB',
+    serial: 'SIM-NVME-PURGE-9912',
+    capacity_bytes: 512000000000,
+    logical_block_size: 512,
+    physical_block_size: 4096,
+    interface: 'Nvme',
+    media_type: 'SsdNvme',
+    mounted: false,
+    mount_points: [],
+    boot_device: false,
+    system_disk: false,
+    read_only: false,
+    capabilities: ['NvmeSanitizeBlockErase', 'NvmeSanitizeCryptoErase', 'NvmeSanitizeOverwrite', 'TrimSupported'],
+  },
+  {
+    stable_id: 'disk-vdisk-01',
+    path: '/dev/loop0',
+    model: '[Simulated] VANISH Virtual Forensic Image',
+    serial: 'VN-LAB-8821',
+    capacity_bytes: 536870912, // 512MB
+    logical_block_size: 512,
+    physical_block_size: 4096,
+    interface: 'Virtual',
+    media_type: 'VirtualDisk',
+    mounted: false,
+    mount_points: [],
+    boot_device: false,
+    system_disk: false,
+    read_only: false,
+    capabilities: ['HostBlockOverwrite', 'TrimSupported'],
+  },
+  {
+    stable_id: 'disk-host-sys',
     path: '/dev/nvme0n1',
-    model: 'Samsung SSD 980 PRO 1TB',
-    serial: 'S5GXNF0R123456',
+    model: 'Host Primary System Disk (Write-Locked)',
+    serial: 'SYS-HOST-PROTECTED-01',
     capacity_bytes: 1000204886016,
     logical_block_size: 512,
     physical_block_size: 512,
@@ -80,17 +97,21 @@ export async function fetchRecommendedPlan(
     console.warn('Tauri API unavailable, generating client simulated plan:', err);
   }
 
+  const isSimulated = device.stable_id.startsWith('disk-sim-') || device.media_type === 'VirtualDisk';
+
   return {
     plan_id: `plan-${Math.random().toString(36).substring(2, 9)}`,
     target_id: device.stable_id,
     standard,
     method: device.media_type === 'SsdNvme' ? 'NvmeSanitizeCryptoErase' : 'SimulatedSanitization',
-    rationale: `Hardware-aware profile selected for ${typeof device.media_type === 'string' ? device.media_type : 'Device'} under standard ${standard}.`,
+    rationale: `Hardware-aware profile selected for ${typeof device.media_type === 'string' ? device.media_type : 'Device'} under standard ${standard}.${
+      isSimulated ? ' (Executing against simulated hardware target per lab spec)' : ''
+    }`,
     prerequisites: ['Verify target serial number', 'Confirm target is not host boot/system drive'],
     warnings: device.system_disk ? ['PROTECTED SYSTEM DISK: Operation will be rejected by safety gate.'] : [],
     estimated_duration_seconds: 45,
     verification_levels_planned: ['L1_LOGICAL', 'L2_HOST_VISIBLE', 'L4_FORENSIC'],
-    simulation_mode: device.media_type === 'VirtualDisk',
+    simulation_mode: isSimulated,
   };
 }
 
