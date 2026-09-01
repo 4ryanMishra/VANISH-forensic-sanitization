@@ -1,3 +1,7 @@
+pub mod linux;
 pub mod mock;
+pub mod windows;
 
-pub struct PlatformStorageService;
+pub use linux::LinuxStoragePlatform;
+pub use mock::MockPlatformStorage;
+pub use windows::WindowsStoragePlatform;
