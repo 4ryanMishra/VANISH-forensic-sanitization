@@ -74,7 +74,33 @@ impl OverwriteEngine {
 
         let chunk_size = if block_size == 0 { 64 * 1024 } else { block_size.min(1024 * 1024) };
         let mut buffer = vec![0u8; chunk_size];
+        let path_str = device_path.to_string_lossy().to_string();
 
+        #[cfg(target_os = "windows")]
+        let (mut file, raw_handle_opt) = {
+            if path_str.to_uppercase().contains("PHYSICALDRIVE") {
+                let h = crate::platform::windows::win32_storage::open_handle_for_io(&path_str, true)
+                    .map_err(|e| anyhow::anyhow!("Failed to open raw physical drive '{}' (OS error {}: {})", path_str, e.raw_os_error().unwrap_or(0), e))?;
+
+                // Issue Win32 FSCTL_ALLOW_EXTENDED_DASD_IO and dismount IOCTLs on the handle
+                if let Err(e) = crate::platform::windows::win32_storage::prepare_physical_handle_for_raw_write(h) {
+                    eprintln!("Advisory: IOCTL DASD prep on '{}': {}", path_str, e);
+                }
+
+                // Convert Win32 HANDLE to std::fs::File for buffered/stream writing
+                use std::os::windows::io::FromRawHandle;
+                let f = unsafe { std::fs::File::from_raw_handle(h as _) };
+                (f, Some(h))
+            } else {
+                let f = OpenOptions::new()
+                    .write(true)
+                    .open(device_path)
+                    .with_context(|| format!("Failed to open target path '{:?}' for raw write", device_path))?;
+                (f, None)
+            }
+        };
+
+        #[cfg(not(target_os = "windows"))]
         let mut file = OpenOptions::new()
             .write(true)
             .open(device_path)
@@ -106,8 +132,16 @@ impl OverwriteEngine {
                 r.fill_bytes(&mut buffer[..bytes_to_write]);
             }
 
-            file.write_all(&buffer[..bytes_to_write])
-                .with_context(|| format!("Write error at offset {} on '{:?}'", written, device_path))?;
+            match file.write_all(&buffer[..bytes_to_write]) {
+                Ok(_) => {},
+                Err(err) => {
+                    let os_code = err.raw_os_error().unwrap_or(0);
+                    return Err(anyhow::anyhow!(
+                        "Raw write error at byte offset {} on '{}': OS error {} ({})",
+                        written, path_str, os_code, err
+                    ));
+                }
+            }
 
             written += bytes_to_write as u64;
             progress_cb(written, total_bytes);
@@ -116,6 +150,14 @@ impl OverwriteEngine {
         file.sync_data()
             .or_else(|_| file.sync_all())
             .with_context(|| format!("Failed to flush buffers to storage on '{:?}'", device_path))?;
+
+        #[cfg(target_os = "windows")]
+        if let Some(h) = raw_handle_opt {
+            let _ = crate::platform::windows::win32_storage::send_ioctl(
+                h,
+                crate::platform::windows::win32_storage::FSCTL_UNLOCK_VOLUME,
+            );
+        }
 
         Ok(written)
     }

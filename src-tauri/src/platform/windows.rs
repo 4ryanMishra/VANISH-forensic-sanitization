@@ -55,10 +55,18 @@ impl WindowsStoragePlatform {
         Ok(vec![])
     }
 
-    /// Prepares a physical disk on Windows for full-disk raw block overwrite by dismounting
-    /// volumes and clearing filesystem write locks on Sector 0 and partitions.
+    /// Prepares a physical disk on Windows for full-disk raw block overwrite by locking and dismounting
+    /// all volume handles in Win32, removing drive letter mounts, and clearing filesystem locks.
     pub fn prepare_disk_for_raw_overwrite(disk_number: u32, mount_points: &[String]) -> Result<()> {
-        // 1. Dismount volume mount points to release filesystem locks
+        // 1. Direct Win32 FSCTL_LOCK_VOLUME and FSCTL_DISMOUNT_VOLUME on each drive letter
+        for mp in mount_points {
+            let drive_letter = mp.trim_end_matches('\\').trim_end_matches(':');
+            if !drive_letter.is_empty() {
+                let _ = win32_storage::lock_and_dismount_volume(drive_letter);
+            }
+        }
+
+        // 2. Remove mount point via mountvol /P
         for mp in mount_points {
             let drive_letter = mp.trim_end_matches('\\').trim_end_matches(':');
             if !drive_letter.is_empty() {
@@ -68,7 +76,7 @@ impl WindowsStoragePlatform {
             }
         }
 
-        // 2. Use PowerShell Clear-Disk to unbind filesystem partitions and wipe partition structures
+        // 3. Use PowerShell Clear-Disk to unbind filesystem partitions and wipe partition structures
         let clear_script = format!(
             "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'SilentlyContinue'; Clear-Disk -Number {} -RemoveData -RemoveOEM -Confirm:$false",
             disk_number
@@ -87,6 +95,135 @@ impl WindowsStoragePlatform {
         let _ = Self::exec_powershell_encoded(&update_script);
         Ok(())
     }
+}
+
+pub mod win32_storage {
+    use std::ffi::c_void;
+    use std::os::windows::ffi::OsStrExt;
+
+    pub const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
+    pub const FSCTL_UNLOCK_VOLUME: u32 = 0x0009001C;
+    pub const FSCTL_DISMOUNT_VOLUME: u32 = 0x00090020;
+    pub const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x00090083;
+
+    pub const GENERIC_READ: u32 = 0x80000000;
+    pub const GENERIC_WRITE: u32 = 0x40000000;
+    pub const FILE_SHARE_READ: u32 = 0x00000001;
+    pub const FILE_SHARE_WRITE: u32 = 0x00000002;
+    pub const FILE_SHARE_DELETE: u32 = 0x00000004;
+    pub const OPEN_EXISTING: u32 = 3;
+    pub const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
+    pub type HANDLE = *mut c_void;
+    pub const INVALID_HANDLE_VALUE: HANDLE = -1isize as HANDLE;
+
+    extern "system" {
+        pub fn CreateFileW(
+            lpFileName: *const u16,
+            dwDesiredAccess: u32,
+            dwShareMode: u32,
+            lpSecurityAttributes: *mut c_void,
+            dwCreationDisposition: u32,
+            dwFlagsAndAttributes: u32,
+            hTemplateFile: HANDLE,
+        ) -> HANDLE;
+
+        pub fn DeviceIoControl(
+            hDevice: HANDLE,
+            dwIoControlCode: u32,
+            lpInBuffer: *const c_void,
+            nInBufferSize: u32,
+            lpOutBuffer: *mut c_void,
+            nOutBufferSize: u32,
+            lpBytesReturned: *mut u32,
+            lpOverlapped: *mut c_void,
+        ) -> i32;
+
+        pub fn CloseHandle(hObject: HANDLE) -> i32;
+    }
+
+    pub fn to_wide_null(s: &str) -> Vec<u16> {
+        std::ffi::OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    /// Opens a volume or physical disk handle for IOCTL operations
+    pub fn open_handle_for_io(path: &str, write_access: bool) -> Result<HANDLE, std::io::Error> {
+        let wide = to_wide_null(path);
+        let access = if write_access { GENERIC_READ | GENERIC_WRITE } else { GENERIC_READ };
+        let share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+
+        let handle = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                access,
+                share,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                std::ptr::null_mut(),
+            )
+        };
+
+        if handle == INVALID_HANDLE_VALUE {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(handle)
+        }
+    }
+
+    /// Issue an IOCTL control code on an open handle
+    pub fn send_ioctl(handle: HANDLE, code: u32) -> Result<(), std::io::Error> {
+        let mut bytes_returned: u32 = 0;
+        let res = unsafe {
+            DeviceIoControl(
+                handle,
+                code,
+                std::ptr::null(),
+                0,
+                std::ptr::null_mut(),
+                0,
+                &mut bytes_returned,
+                std::ptr::null_mut(),
+            )
+        };
+        if res != 0 {
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+
+    /// Dismount and lock a volume letter (e.g. "E:" or "\\.\E:")
+    pub fn lock_and_dismount_volume(drive_letter: &str) -> Result<(), String> {
+        let clean = drive_letter.trim_end_matches('\\').trim_end_matches(':');
+        let vol_path = format!(r"\\.\{}:", clean);
+        let handle = open_handle_for_io(&vol_path, true)
+            .map_err(|e| format!("Failed to open volume '{}': {}", vol_path, e))?;
+
+        let _ = send_ioctl(handle, FSCTL_LOCK_VOLUME);
+        let dismount_res = send_ioctl(handle, FSCTL_DISMOUNT_VOLUME);
+
+        unsafe { CloseHandle(handle) };
+
+        if let Err(e) = dismount_res {
+            return Err(format!("FSCTL_DISMOUNT_VOLUME on '{}' advisory: {}", vol_path, e));
+        }
+        Ok(())
+    }
+
+    /// Prepare an opened physical disk handle for direct DASD raw writes
+    pub fn prepare_physical_handle_for_raw_write(handle: HANDLE) -> Result<(), std::io::Error> {
+        // 1. Allow Extended DASD I/O (Bypasses Sector 0 / partition table write blocking)
+        let _ = send_ioctl(handle, FSCTL_ALLOW_EXTENDED_DASD_IO);
+        // 2. Lock volume/disk
+        let _ = send_ioctl(handle, FSCTL_LOCK_VOLUME);
+        // 3. Dismount filesystem
+        let _ = send_ioctl(handle, FSCTL_DISMOUNT_VOLUME);
+        Ok(())
+    }
+}
+
+impl WindowsStoragePlatform {
 
     /// Query Windows Storage Module using Get-Disk & Get-Partition
     fn query_get_disk() -> Result<Vec<WindowsDiskRaw>> {
