@@ -1,5 +1,5 @@
 use crate::forensic::carving::container::*;
-use crate::forensic::carving::signature::{get_signature_for_format, ContainerType, MagicSignature, KNOWN_SIGNATURES};
+use crate::forensic::carving::signature::{ContainerType, KNOWN_SIGNATURES};
 use crate::common::recovery::ArtifactFormat;
 
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ impl PatternScanner {
                 let hlen = sig.header.len();
                 if i + hlen <= len && &data[i..i + hlen] == sig.header {
                     let remaining = &data[i..len];
-                    let header_hex = hex::encode(sig.header);
+                    let header_magic_hex = hex::encode(sig.header);
                     let is_aligned = (i % 512) == 0;
 
                     let mut detected_length = None;

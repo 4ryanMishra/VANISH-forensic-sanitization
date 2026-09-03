@@ -63,13 +63,15 @@ impl ForensicEngine {
             covered_ranges.push((cand.start_offset, cand.end_offset));
 
             let art_id = format!("art-{}-{}", &sha256[..8], cand.start_offset);
-            let ext = match cand.format {
+            let ext = match &cand.format {
                 ArtifactFormat::Jpeg => "jpg",
                 ArtifactFormat::Png => "png",
                 ArtifactFormat::Pdf => "pdf",
                 ArtifactFormat::Zip => "zip",
                 ArtifactFormat::Sqlite => "sqlite",
                 ArtifactFormat::PlainText => "txt",
+                ArtifactFormat::Gif => "gif",
+                ArtifactFormat::Riff => "riff",
                 ArtifactFormat::Unknown(ref t) => match t.as_str() {
                     "RIFF" => "wav",
                     "GIF" => "gif",
@@ -90,7 +92,7 @@ impl ForensicEngine {
                 source_id: source_id.to_string(),
                 source_hash: Some(source_hash.clone()),
                 source_offsets: vec![(cand.start_offset, cand.end_offset)],
-                format: cand.format,
+                format: cand.format.clone(),
                 original_path: Some(format!("recovered/{}_carved.{}", art_id, ext)),
                 extracted_path: Some(format!("recovered/{}_carved.{}", art_id, ext)),
                 size_bytes: cand.length_bytes as u64,

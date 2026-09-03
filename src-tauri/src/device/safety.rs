@@ -1,5 +1,5 @@
 use crate::common::device::{Device, DeviceCapability, InterfaceType, MediaType};
-use crate::common::sanitization::{SanitizationMethod, SanitizationPlan, SanitizationStandard};
+use crate::common::sanitization::{SanitizationMethod, SanitizationPlan};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

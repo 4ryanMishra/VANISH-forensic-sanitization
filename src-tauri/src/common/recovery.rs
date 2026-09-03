@@ -8,6 +8,8 @@ pub enum ArtifactFormat {
     Png,
     Sqlite,
     PlainText,
+    Gif,
+    Riff,
     Unknown(String),
 }
 

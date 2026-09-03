@@ -52,6 +52,8 @@ impl ArtifactValidator {
             ArtifactFormat::Zip => Self::validate_zip(data),
             ArtifactFormat::Sqlite => Self::validate_sqlite(data),
             ArtifactFormat::PlainText => Self::validate_plain_text(data),
+            ArtifactFormat::Gif => Self::validate_gif(data),
+            ArtifactFormat::Riff => Self::validate_riff(data),
             ArtifactFormat::Unknown(tag) if tag == "RIFF" => Self::validate_riff(data),
             ArtifactFormat::Unknown(tag) if tag == "GIF" => Self::validate_gif(data),
             ArtifactFormat::Unknown(_) => ValidationOutcome {

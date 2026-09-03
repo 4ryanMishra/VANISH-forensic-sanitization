@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::Path;
 

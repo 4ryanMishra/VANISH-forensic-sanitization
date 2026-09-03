@@ -116,6 +116,7 @@ impl LinuxStoragePlatform {
         // 4. Model and Serial detection without fabrication
         let model = fs::read_to_string(block_dir.join("device/model"))
             .or_else(|_| fs::read_to_string(block_dir.join("device/name")))
+            .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| {
@@ -130,6 +131,7 @@ impl LinuxStoragePlatform {
 
         let serial = fs::read_to_string(block_dir.join("device/serial"))
             .or_else(|_| fs::read_to_string(block_dir.join("device/wwid")))
+            .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "UNKNOWN".to_string());

@@ -1,4 +1,4 @@
-use crate::common::device::{Device, DeviceCapability, InterfaceType, MediaType};
+use crate::common::device::{Device, DeviceCapability, MediaType};
 use crate::common::sanitization::{SanitizationMethod, SanitizationPlan};
 use crate::device::{ExecutionTargetSnapshot, SafetyGate};
 use crate::sanitization::nvme::{NvmeAdminCommand, NvmeSanitizeAction, SimulatedNvmeController};
@@ -180,7 +180,7 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                 log.push(format!("Executing targeted file shredding ({} passes, zero_slack={})", passes, zero_slack));
                 let path = Path::new(&live_device.path);
                 let bytes = if path.exists() && path.is_file() {
-                    crate::deletion::FileShredder::shred_file(path, *passes as usize)?
+                    crate::deletion::FileShredder::shred_file(path, *passes)?
                 } else {
                     snapshot.capacity_bytes
                 };
@@ -291,7 +291,10 @@ impl DeviceSanitizationAdapter for NvmeSanitizeAdapter {
         })?;
 
         log.push(format!("Controller Sanitize Status Log: {}", status_log.status_description));
-        log.push(format!("NVMe SSTAT: 0x{:02X}, SPROG: 0x{:04X}", status_log.sstat, status_log.sprog));
+        log.push(format!(
+            "NVMe Status Code: 0x{:02X}, Progress: {:.1}%, GlobalDataErased: {}",
+            status_log.status_code, status_log.progress_percentage, status_log.global_data_erased
+        ));
 
         Ok(ExecutionSummary {
             plan_id: plan.plan_id.clone(),

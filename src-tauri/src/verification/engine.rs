@@ -1,4 +1,4 @@
-use crate::common::device::{Device, MediaType};
+use crate::common::device::{Device, DeviceCapability, MediaType};
 use super::{
     pattern::{scan_pattern, ExpectedPattern},
     sampling::{
@@ -225,6 +225,7 @@ impl VerificationEngine {
         let sample_count = 64;
         let block_size = (device.logical_block_size as u32).max(512);
         let mut limitations = vec![];
+        let mut evidence = vec![];
 
         let (samples, is_simulated_sampling) = if simulation_mode {
             limitations.push("Entropy and pattern scan performed over simulated sample blocks.".to_string());
@@ -253,9 +254,8 @@ impl VerificationEngine {
                         if file.seek(SeekFrom::Start(offset)).is_ok() {
                             let mut buf = vec![0u8; block_size as usize];
                             if file.read_exact(&mut buf).is_ok() {
-                                real_samples.push(super::sampling::SampleBlock {
+                                real_samples.push(super::sampling::BlockSample {
                                     lba,
-                                    offset_bytes: offset,
                                     data: buf,
                                 });
                             } else {
@@ -311,7 +311,6 @@ impl VerificationEngine {
         let sample_refs: Vec<(u64, &[u8])> = samples.iter().map(|s| (s.lba, s.data.as_slice())).collect();
         let pattern_result = scan_pattern(&sample_refs, expected_pattern);
 
-        let mut evidence = vec![];
         let sim_prefix = if is_simulated_sampling { "[SIMULATION] " } else { "" };
 
         evidence.push(format!(
@@ -350,7 +349,7 @@ impl VerificationEngine {
 
         VerificationResult {
             level: VerificationLevel::L2HostVisible,
-            status,
+            status: status.clone(),
             method: format!("LBA Sampling & Shannon Entropy Analysis (Pattern: {:?})", expected_pattern),
             confidence_pct: confidence,
             detail: format!(
@@ -374,7 +373,12 @@ impl VerificationEngine {
 
         // Check if media is NVMe
         let is_nvme = matches!(device.media_type, MediaType::SsdNvme)
-            || device.capabilities.iter().any(|c| c.contains("NvmeSanitize"));
+            || device.capabilities.iter().any(|c| matches!(
+                c,
+                DeviceCapability::NvmeSanitizeBlockErase
+                    | DeviceCapability::NvmeSanitizeCryptoErase
+                    | DeviceCapability::NvmeSanitizeOverwrite
+            ));
 
         if !is_nvme {
             return VerificationResult {

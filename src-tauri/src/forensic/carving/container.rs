@@ -1,5 +1,3 @@
-use std::convert::TryInto;
-
 pub struct PngContainerParser;
 
 impl PngContainerParser {

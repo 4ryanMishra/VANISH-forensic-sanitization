@@ -76,7 +76,7 @@ pub static KNOWN_SIGNATURES: &[MagicSignature] = &[
     },
     // GIF87a / GIF89a: 47 49 46 38, Trailer = 3B
     MagicSignature {
-        format: ArtifactFormat::Unknown("GIF".to_string()),
+        format: ArtifactFormat::Gif,
         container_type: ContainerType::GifStream,
         header: &[0x47, 0x49, 0x46, 0x38],
         footer: Some(&[0x3B]),
@@ -86,7 +86,7 @@ pub static KNOWN_SIGNATURES: &[MagicSignature] = &[
     },
     // RIFF (WAV, AVI, WEBP): 52 49 46 46
     MagicSignature {
-        format: ArtifactFormat::Unknown("RIFF".to_string()),
+        format: ArtifactFormat::Riff,
         container_type: ContainerType::RiffContainer,
         header: &[0x52, 0x49, 0x46, 0x46],
         footer: None,

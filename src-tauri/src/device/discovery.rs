@@ -1,12 +1,15 @@
-use crate::common::device::{Device, InterfaceType, MediaType};
+use crate::common::device::{Device, InterfaceType};
 use crate::device::capabilities::CapabilityDiscoveryEngine;
 use crate::device::identity::DeviceIdentityEngine;
 use crate::platform::{LinuxStoragePlatform, MockPlatformStorage, WindowsStoragePlatform};
 use anyhow::Result;
 
 pub struct DeviceDiscoveryService {
+    #[allow(dead_code)]
     linux_platform: LinuxStoragePlatform,
+    #[allow(dead_code)]
     windows_platform: WindowsStoragePlatform,
+    #[allow(dead_code)]
     mock_platform: MockPlatformStorage,
 }
 

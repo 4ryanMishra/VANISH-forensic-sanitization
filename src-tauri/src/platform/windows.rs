@@ -1,4 +1,4 @@
-use crate::common::device::{Device, DeviceCapability, InterfaceType, MediaType};
+use crate::common::device::Device;
 use anyhow::Result;
 
 pub struct WindowsStoragePlatform;

@@ -6,4 +6,6 @@ pub mod safety;
 pub use capabilities::CapabilityDiscoveryEngine;
 pub use discovery::DeviceDiscoveryService;
 pub use identity::DeviceIdentityEngine;
-pub use safety::{SafetyError, SafetyGate};
+pub use safety::{
+    ExecutionTargetSnapshot, SafetyCheckStatus, SafetyError, SafetyGate, SafetyEvaluationReport,
+};

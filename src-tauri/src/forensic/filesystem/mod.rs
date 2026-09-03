@@ -189,7 +189,7 @@ impl FilesystemParser {
                         let mut file_size: u64 = 0;
                         let mut is_resident = false;
                         let mut resident_bytes = None;
-                        let mut cluster_runs = Vec::new();
+                        let cluster_runs = Vec::new();
 
                         let mut attr_offset = first_attr_offset;
                         while attr_offset + 8 <= record_size {
