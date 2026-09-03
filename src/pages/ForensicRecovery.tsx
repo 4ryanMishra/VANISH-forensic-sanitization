@@ -1,22 +1,37 @@
-import React, { useState } from 'react';
-import { FileCode, Play, Download, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { RecoveredArtifact, RecoveryJob } from '../types';
-import { executeRecoveryJob } from '../services/api';
+import React, { useState, useEffect } from 'react';
+import { FileCode, Play, Download, ShieldCheck, CheckCircle2, HardDrive, Image as ImageIcon, Eye } from 'lucide-react';
+import { Device, RecoveredArtifact, RecoveryJob } from '../types';
+import { executeRecoveryJob, fetchDevices } from '../services/api';
 
 export const ForensicRecovery: React.FC = () => {
+  const [devices, setDevices] = useState<Device[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<string>('test-data/virtual-disks/vanish_lab_image.img');
   const [scanning, setScanning] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [artifacts, setArtifacts] = useState<RecoveredArtifact[]>([]);
-  const [scanSummary, setScanSummary] = useState<{ scannedBytes: number; durationMs: number; isSim: boolean } | null>(null);
+  const [scanSummary, setScanSummary] = useState<{ scannedBytes: number; durationMs: number; isSim: boolean; targetLabel?: string } | null>(null);
+  const [previewArtifact, setPreviewArtifact] = useState<RecoveredArtifact | null>(null);
+
+  useEffect(() => {
+    fetchDevices().then((devs) => {
+      setDevices(devs);
+      // Auto-select physical non-system target if available
+      const realTarget = devs.find((d) => !d.system_disk && !d.boot_device && !d.is_simulated);
+      if (realTarget) {
+        setSelectedTarget(realTarget.path);
+      }
+    });
+  }, []);
 
   const isSimulation = selectedTarget === 'disk-vdisk-01';
+  const isPhysical = selectedTarget.toUpperCase().includes('PHYSICALDRIVE') || selectedTarget.startsWith('\\\\.\\') || selectedTarget.startsWith('/dev/');
 
   const handleStartScan = async () => {
     setScanning(true);
     setProgress(0);
     setArtifacts([]);
     setScanSummary(null);
+    setPreviewArtifact(null);
 
     const interval = setInterval(() => {
       setProgress((prev) => {
@@ -42,6 +57,7 @@ export const ForensicRecovery: React.FC = () => {
         scannedBytes: result.total_scanned_bytes,
         durationMs: result.execution_time_ms,
         isSim: result.simulation_mode,
+        targetLabel: result.source_id,
       });
     } catch (err) {
       console.error('Forensic recovery failed:', err);
@@ -49,6 +65,31 @@ export const ForensicRecovery: React.FC = () => {
     } finally {
       setScanning(false);
     }
+  };
+
+  const handleDownloadArtifact = (art: RecoveredArtifact) => {
+    if (!art.data_base64) return;
+    const byteCharacters = atob(art.data_base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const mimeType = typeof art.format === 'string' && art.format.toLowerCase() === 'jpeg'
+      ? 'image/jpeg'
+      : typeof art.format === 'string' && art.format.toLowerCase() === 'png'
+      ? 'image/png'
+      : typeof art.format === 'string' && art.format.toLowerCase() === 'pdf'
+      ? 'application/pdf'
+      : 'application/octet-stream';
+    const blob = new Blob([byteArray], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ext = typeof art.format === 'string' && art.format.toLowerCase() === 'jpeg' ? 'jpg' : typeof art.format === 'string' ? art.format.toLowerCase() : 'bin';
+    a.download = `VANISH_RECOVERED_${art.artifact_id}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleExportManifest = () => {
@@ -81,6 +122,11 @@ export const ForensicRecovery: React.FC = () => {
               <span className="px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-mono font-bold">
                 SIMULATION MODE
               </span>
+            ) : isPhysical ? (
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono font-bold flex items-center space-x-1">
+                <HardDrive className="w-3 h-3" />
+                <span>PHYSICAL DISK STREAM (READ-ONLY)</span>
+              </span>
             ) : (
               <span className="px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-xs font-mono font-bold">
                 RAW IMAGE CARVING
@@ -99,12 +145,25 @@ export const ForensicRecovery: React.FC = () => {
             disabled={scanning}
             className="bg-surface border border-gray-700 text-gray-200 text-xs rounded-lg px-3 py-2.5 focus:outline-none focus:border-purple-500 font-mono"
           >
-            <option value="test-data/virtual-disks/vanish_lab_image.img">
-              Target 1: vanish_lab_image.img (16MB Raw Image)
-            </option>
-            <option value="disk-vdisk-01">
-              Target 2: disk-vdisk-01 (In-Memory Virtual Disk)
-            </option>
+            {devices.filter((d) => !d.is_simulated).length > 0 && (
+              <optgroup label="Physical Storage Devices (Strict Read-Only)">
+                {devices
+                  .filter((d) => !d.is_simulated)
+                  .map((d) => (
+                    <option key={d.stable_id} value={d.path}>
+                      {d.path} ({d.model} - {(d.capacity_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB)
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+            <optgroup label="Laboratory Demo & Virtual Targets">
+              <option value="test-data/virtual-disks/vanish_lab_image.img">
+                Target: vanish_lab_image.img (16MB Raw Image)
+              </option>
+              <option value="disk-vdisk-01">
+                Target: disk-vdisk-01 (In-Memory Virtual Disk)
+              </option>
+            </optgroup>
           </select>
 
           <button
@@ -122,10 +181,10 @@ export const ForensicRecovery: React.FC = () => {
       <div className="p-4 rounded-xl bg-surface border border-gray-800 flex items-center justify-between text-xs font-mono">
         <div className="flex items-center space-x-2 text-emerald-400">
           <ShieldCheck className="w-4 h-4" />
-          <span className="font-semibold">Write-Block Status: Hardware/Kernel Read-Only Active</span>
+          <span className="font-semibold">Write-Block Status: Hardware/Kernel Read-Only Active (Zero-Write Enforcement)</span>
         </div>
         <div className="text-gray-400">
-          Mode: <strong className={isSimulation ? 'text-blue-400' : 'text-purple-400'}>{isSimulation ? 'SIMULATION MODE' : 'RAW DISK STREAM'}</strong>
+          Mode: <strong className={isSimulation ? 'text-blue-400' : isPhysical ? 'text-emerald-400' : 'text-purple-400'}>{isSimulation ? 'SIMULATION MODE' : isPhysical ? 'PHYSICAL DEVICE RAW STREAM' : 'RAW IMAGE STREAM'}</strong>
         </div>
       </div>
 
@@ -133,7 +192,7 @@ export const ForensicRecovery: React.FC = () => {
       {scanning && (
         <div className="p-6 rounded-xl bg-surface border border-gray-800 space-y-2">
           <div className="flex justify-between text-xs font-mono">
-            <span className="text-gray-400">Scanning raw sector stream and filesystem slack...</span>
+            <span className="text-gray-400">Streaming raw physical sectors and analyzing container magic headers...</span>
             <span className="text-purple-400 font-bold">{progress}%</span>
           </div>
           <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
@@ -153,9 +212,49 @@ export const ForensicRecovery: React.FC = () => {
             <span>Scan Complete: {artifacts.length} Artifacts Recovered & Validated</span>
           </div>
           <div className="flex items-center space-x-4 text-gray-400">
-            <span>Bytes Scanned: <strong className="text-gray-200">{(scanSummary.scannedBytes / 1024).toFixed(1)} KB</strong></span>
+            <span>Bytes Scanned: <strong className="text-gray-200">{scanSummary.scannedBytes >= 1024 * 1024 ? `${(scanSummary.scannedBytes / (1024 * 1024)).toFixed(2)} MB` : `${(scanSummary.scannedBytes / 1024).toFixed(1)} KB`}</strong></span>
             <span>Duration: <strong className="text-gray-200">{scanSummary.durationMs} ms</strong></span>
-            <span>Mode: <strong className={scanSummary.isSim ? 'text-blue-400' : 'text-purple-400'}>{scanSummary.isSim ? 'SIMULATION' : 'RAW IMAGE'}</strong></span>
+            <span>Source: <strong className="text-emerald-400">{scanSummary.targetLabel || selectedTarget}</strong></span>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewArtifact && previewArtifact.data_base64 && (
+        <div className="p-6 rounded-xl bg-surface border border-purple-500/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-purple-400">
+              <ImageIcon className="w-4 h-4" />
+              <span className="font-bold text-sm text-white">Carved File Preview: {previewArtifact.original_path || previewArtifact.artifact_id}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleDownloadArtifact(previewArtifact)}
+                className="flex items-center space-x-1 px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-semibold"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Save File</span>
+              </button>
+              <button
+                onClick={() => setPreviewArtifact(null)}
+                className="px-2 py-1 text-gray-400 hover:text-white text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="flex justify-center p-4 bg-black/40 rounded-lg border border-gray-800">
+            {typeof previewArtifact.format === 'string' && (previewArtifact.format.toLowerCase() === 'jpeg' || previewArtifact.format.toLowerCase() === 'png' || previewArtifact.format.toLowerCase() === 'gif') ? (
+              <img
+                src={`data:image/${previewArtifact.format.toLowerCase() === 'jpeg' ? 'jpeg' : previewArtifact.format.toLowerCase()};base64,${previewArtifact.data_base64}`}
+                alt="Carved Artifact"
+                className="max-h-72 max-w-full rounded shadow-lg object-contain border border-gray-700"
+              />
+            ) : (
+              <div className="p-8 text-xs font-mono text-gray-400 text-center">
+                Binary preview: {previewArtifact.size_bytes} bytes reconstructed. Click "Save File" to export.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -178,8 +277,8 @@ export const ForensicRecovery: React.FC = () => {
         </div>
 
         {artifacts.length === 0 && !scanning && (
-          <div className="p-8 text-center text-gray-500 text-sm">
-            No active recovery session. Select a forensic target image and click "Start Carving Scan".
+          <div className="p-8 text-center text-gray-500 text-sm font-mono">
+            No active recovery session. Select target device and click "Start Carving Scan".
           </div>
         )}
 
@@ -228,6 +327,25 @@ export const ForensicRecovery: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {art.data_base64 && (
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button
+                      onClick={() => setPreviewArtifact(art)}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-surface-highlight hover:bg-gray-800 border border-gray-700 text-purple-400 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview</span>
+                    </button>
+                    <button
+                      onClick={() => handleDownloadArtifact(art)}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Extract</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

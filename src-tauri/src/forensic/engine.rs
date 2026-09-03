@@ -113,6 +113,7 @@ impl ForensicEngine {
                     header_magic: cand.header_magic_hex,
                     recovery_timestamp_utc: now_utc.clone(),
                 },
+                data_base64: Some(Self::encode_base64(&cand.raw_bytes)),
             });
         }
 
@@ -179,6 +180,7 @@ impl ForensicEngine {
                                     header_magic: "---FRAGMENT-STITCHED---".to_string(),
                                     recovery_timestamp_utc: now_utc.clone(),
                                 },
+                                data_base64: Some(Self::encode_base64(&stitched)),
                             });
                         }
                     }
@@ -187,6 +189,33 @@ impl ForensicEngine {
         }
 
         artifacts
+    }
+
+    /// Pure zero-dependency Base64 encoder helper
+    pub fn encode_base64(bytes: &[u8]) -> String {
+        const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+        for chunk in bytes.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
+            let b2 = if chunk.len() > 2 { chunk[2] } else { 0 };
+
+            out.push(CHARSET[(b0 >> 2) as usize] as char);
+            out.push(CHARSET[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
+
+            if chunk.len() > 1 {
+                out.push(CHARSET[(((b1 & 0x0F) << 2) | (b2 >> 6)) as usize] as char);
+            } else {
+                out.push('=');
+            }
+
+            if chunk.len() > 2 {
+                out.push(CHARSET[(b2 & 0x3F) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+        out
     }
 
     /// Read-only forensic image scanner (dd / img / raw image file)

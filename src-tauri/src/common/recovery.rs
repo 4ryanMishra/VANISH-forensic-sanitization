@@ -76,6 +76,8 @@ pub struct RecoveredArtifact {
     pub confidence_score: f32, // 0.0 to 1.0 based on structural evidence
     pub timestamp_utc: String,
     pub provenance: ArtifactProvenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_base64: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

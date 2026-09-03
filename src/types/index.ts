@@ -318,6 +318,7 @@ export interface RecoveredArtifact {
   confidence_score: number;
   timestamp_utc: string;
   provenance: ArtifactProvenance;
+  data_base64?: string;
 }
 
 export interface RecoveryJob {

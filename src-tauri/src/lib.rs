@@ -274,7 +274,7 @@ pub mod commands {
     ) -> Result<crate::common::recovery::RecoveryResult, String> {
         let start_time = std::time::Instant::now();
 
-        let (data, source_label, is_sim) = if job.simulation_mode || job.source_path.is_empty() || job.source_path.starts_with("disk-") {
+        let (data, source_label, is_sim) = if job.simulation_mode || job.source_path == "disk-vdisk-01" {
             let mut sim_buf = vec![0u8; 1024 * 1024];
             let jpeg_header = &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00];
             let jpeg_sof = &[0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x00, 0x01, 0x00, 0x01, 0x01, 0x11, 0x00];
@@ -305,12 +305,38 @@ pub mod commands {
             sim_buf[65536..65536 + png_bytes.len()].copy_from_slice(&png_bytes);
 
             (sim_buf, "disk-vdisk-01 (Virtual Disk Image)".to_string(), true)
+        } else if job.source_path.to_uppercase().contains("PHYSICALDRIVE")
+            || job.source_path.starts_with(r"\\.\")
+            || job.source_path.starts_with("/dev/")
+            || job.source_path.starts_with("disk-")
+        {
+            // PHYSICAL REAL DEVICE (Strict Read-Only)
+            let devices = state.discovery.list_devices().unwrap_or_default();
+            let matched_device = devices.iter().find(|d| d.path.eq_ignore_ascii_case(&job.source_path) || d.stable_id == job.source_path);
+
+            let (path, capacity, block_size, model, serial) = if let Some(d) = matched_device {
+                (d.path.clone(), d.capacity_bytes, (d.logical_block_size as usize).max(512), d.model.clone(), d.serial.clone())
+            } else {
+                (job.source_path.clone(), 256 * 1024 * 1024, 512, "Physical Disk".to_string(), "UNKNOWN".to_string())
+            };
+
+            let source_label = format!("{} [{} (S/N: {})]", path, model, serial);
+
+            // Read up to 256MB from physical device in sector-aligned chunks (STRICT READ-ONLY)
+            let max_scan_bytes = (256 * 1024 * 1024).min(capacity as usize);
+            let raw_bytes = crate::verification::engine::VerificationEngine::read_physical_sectors(
+                &path,
+                max_scan_bytes,
+                block_size,
+            ).map_err(|e| format!("Physical raw acquisition failed on '{}' (Ensure Administrator privileges): {}", path, e))?;
+
+            (raw_bytes, source_label, false)
         } else {
             let reader = crate::forensic::imaging::RawImageReader::open(&job.source_path).map_err(|e| e.to_string())?;
             (reader.read_all().map_err(|e| e.to_string())?, job.source_path.clone(), false)
         };
 
-        let artifacts = ForensicEngine::scan_bytes(&data, &source_label);
+        let artifacts = ForensicEngine::scan_bytes_with_source_type(&data, &source_label, if is_sim { "SimulationBuffer" } else { "PhysicalReadOnlyDevice" });
         let duration = start_time.elapsed().as_millis() as u64;
         let source_sha256 = hex::encode(sha2::Sha256::digest(&data));
         let artifact_ids: Vec<String> = artifacts.iter().map(|a| a.artifact_id.clone()).collect();
