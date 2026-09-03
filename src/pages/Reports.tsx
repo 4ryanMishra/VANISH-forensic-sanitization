@@ -243,7 +243,7 @@ export const Reports: React.FC = () => {
               ? (selectedDevice?.media_type === 'SsdNvme' && !selectedDevice?.is_simulated
                   ? '"It is hereby certified that the target storage media underwent NVMe sanitize purge and post-wipe deep carving validation. Verified according to the methods actually executed by VANISH."'
                   : selectedDevice?.interface === 'Usb'
-                  ? '"It is hereby certified that the target storage media underwent controlled host-level raw block sanitization and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."'
+                  ? '"It is hereby certified that the target storage media underwent controlled host-level raw block sanitization of the selected volume and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."'
                   : '"Verified according to the methods actually executed by VANISH."')
               : '"It is hereby certified that digital evidence was acquired strictly in read-only write-blocked mode. File signatures, non-contiguous fragment hypotheses, and SHA-256 provenance chains were verified and stored with complete evidential integrity."'}
           </p>
