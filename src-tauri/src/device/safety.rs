@@ -279,17 +279,40 @@ impl SafetyGate {
             });
         }
 
-        // 5. Active Mount Check
+        // 5. Active Mount Check (Fail-closed on system/boot disks; staged dismount on confirmed removable media)
         if device.mounted || !device.mount_points.is_empty() {
-            overall_passed = false;
-            abort_reason = Some(format!("Target has active mount points: {}", device.mount_points.join(", ")));
-            checks.push(SafetyCheck {
-                check: "MountedStateCheck".to_string(),
-                status: SafetyCheckStatus::Blocked,
-                severity: SafetySeverity::High,
-                message: format!("Device has active mounts ({}). Unmount before proceeding.", device.mount_points.join(", ")),
-                evidence: device.mount_points.clone(),
-            });
+            if device.system_disk || device.boot_device {
+                overall_passed = false;
+                abort_reason = Some(format!("Target is host system/boot disk with active mount points: {}", device.mount_points.join(", ")));
+                checks.push(SafetyCheck {
+                    check: "MountedStateCheck".to_string(),
+                    status: SafetyCheckStatus::Blocked,
+                    severity: SafetySeverity::Critical,
+                    message: format!("Host system/boot disk has active mounts ({}). Write operations are permanently blocked.", device.mount_points.join(", ")),
+                    evidence: device.mount_points.clone(),
+                });
+            } else if plan.is_some() {
+                // Non-system removable/secondary target with armed sanitization plan:
+                // Pre-flight preparation will lock and dismount volumes automatically upon destructive execution.
+                checks.push(SafetyCheck {
+                    check: "MountedStateCheck".to_string(),
+                    status: SafetyCheckStatus::Pass,
+                    severity: SafetySeverity::Warning,
+                    message: format!(
+                        "Target has active volume mounts ({}). Pre-flight hardware preparation will lock and dismount volumes before raw block overwrites.",
+                        device.mount_points.join(", ")
+                    ),
+                    evidence: device.mount_points.clone(),
+                });
+            } else {
+                checks.push(SafetyCheck {
+                    check: "MountedStateCheck".to_string(),
+                    status: SafetyCheckStatus::Warning,
+                    severity: SafetySeverity::Warning,
+                    message: format!("Target has active mounts ({}). Volume locking and dismounting required during execution.", device.mount_points.join(", ")),
+                    evidence: device.mount_points.clone(),
+                });
+            }
         } else {
             checks.push(SafetyCheck {
                 check: "MountedStateCheck".to_string(),
@@ -550,20 +573,33 @@ impl SafetyGate {
             evidence: vec!["system_disk: false, boot_device: false".to_string()],
         });
 
-        // Check 6: Mount Status
+        // Check 6: Mount Status (Fail-closed on system/boot disks; staged dismount on confirmed removable media)
         if live.mounted || !live.mount_points.is_empty() {
-            return Err(SafetyError::DeviceMounted(
-                live.path.clone(),
-                live.mount_points.join(", "),
-            ));
+            if live.system_disk || live.boot_device {
+                return Err(SafetyError::SystemDiskProtection(format!(
+                    "Cannot dismount or sanitize host system/boot disk '{}'",
+                    live.path
+                )));
+            }
+            checks.push(SafetyCheck {
+                check: "PreflightMountCheck".to_string(),
+                status: SafetyCheckStatus::Pass,
+                severity: SafetySeverity::Warning,
+                message: format!(
+                    "Target volumes ({}) validated for pre-execution volume locking and dismounting.",
+                    live.mount_points.join(", ")
+                ),
+                evidence: live.mount_points.clone(),
+            });
+        } else {
+            checks.push(SafetyCheck {
+                check: "PreflightMountCheck".to_string(),
+                status: SafetyCheckStatus::Pass,
+                severity: SafetySeverity::Info,
+                message: "Device is confirmed unmounted.".to_string(),
+                evidence: vec!["mounted: false".to_string()],
+            });
         }
-        checks.push(SafetyCheck {
-            check: "PreflightMountCheck".to_string(),
-            status: SafetyCheckStatus::Pass,
-            severity: SafetySeverity::Info,
-            message: "Device is confirmed unmounted.".to_string(),
-            evidence: vec!["mounted: false".to_string()],
-        });
 
         // Check 7: Read-Only Status
         if live.read_only {

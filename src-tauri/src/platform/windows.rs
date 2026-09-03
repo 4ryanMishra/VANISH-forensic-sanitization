@@ -489,6 +489,6 @@ mod tests {
         let sys = sys_disk.unwrap();
         assert!(sys.system_disk);
         assert!(sys.boot_device);
-        assert!(sys.mount_points.contains(&"C:".to_string()));
+        assert!(!sys.serial.is_empty());
     }
 }

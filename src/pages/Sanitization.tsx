@@ -42,6 +42,7 @@ export const Sanitization: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [summary, setSummary] = useState<ExecutionSummary | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
   const [isIssuingCert, setIsIssuingCert] = useState<boolean>(false);
@@ -71,6 +72,7 @@ export const Sanitization: React.FC = () => {
     setIsExecuting(true);
     setProgress(0);
     setSummary(null);
+    setExecutionError(null);
 
     const interval = setInterval(() => {
       setProgress((prev) => (prev >= 90 ? 90 : prev + 15));
@@ -81,9 +83,11 @@ export const Sanitization: React.FC = () => {
       clearInterval(interval);
       setProgress(100);
       setSummary(result);
-    } catch (err) {
+    } catch (err: any) {
       clearInterval(interval);
       console.error('Sanitization failed:', err);
+      const errMsg = typeof err === 'string' ? err : err?.message || JSON.stringify(err);
+      setExecutionError(errMsg);
     } finally {
       setIsExecuting(false);
     }
@@ -484,6 +488,18 @@ export const Sanitization: React.FC = () => {
                   className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
+              </div>
+            </div>
+          )}
+
+          {executionError && !isExecuting && (
+            <div className="p-5 rounded-xl bg-red-950/30 border border-red-500/40 space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-red-400 font-bold text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>Sanitization Operation Aborted or Failed</span>
+              </div>
+              <div className="font-mono text-red-300 pl-7 break-all">
+                {executionError}
               </div>
             </div>
           )}

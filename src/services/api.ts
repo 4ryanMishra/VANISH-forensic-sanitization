@@ -86,14 +86,12 @@ const MOCK_DEVICES: Device[] = [
   },
 ];
 
+const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 export async function fetchDevices(): Promise<Device[]> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<Device[]>('list_devices');
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, using simulation mock data:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<Device[]>('list_devices');
   }
   return MOCK_DEVICES;
 }
@@ -102,13 +100,9 @@ export async function fetchRecommendedPlan(
   device: Device,
   standard: SanitizationStandard
 ): Promise<SanitizationPlan> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<SanitizationPlan>('get_recommended_plan', { device, standard });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, generating client simulated plan:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<SanitizationPlan>('get_recommended_plan', { device, standard });
   }
 
   const isSimulated = device.stable_id.startsWith('disk-sim-') || device.media_type === 'VirtualDisk';
@@ -133,13 +127,9 @@ export async function executeSanitizationPlan(
   plan: SanitizationPlan,
   device: Device
 ): Promise<ExecutionSummary> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<ExecutionSummary>('execute_sanitization_plan', { plan, device });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulated execution summary:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<ExecutionSummary>('execute_sanitization_plan', { plan, device });
   }
 
   return {
@@ -157,13 +147,9 @@ export async function executeSanitizationPlan(
 }
 
 export async function fetchAuditLog(): Promise<AuditEvent[]> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<AuditEvent[]>('get_audit_log');
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, using mock audit log:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<AuditEvent[]>('get_audit_log');
   }
 
   return [
@@ -188,17 +174,13 @@ export async function runVerification(
   sanitizationMethod: string,
   simulationMode: boolean
 ): Promise<VerificationReport> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<VerificationReport>('run_verification', {
-        device,
-        sanitizationMethod,
-        simulationMode,
-      });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulated verification report:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<VerificationReport>('run_verification', {
+      device,
+      sanitizationMethod,
+      simulationMode,
+    });
   }
 
   // Simulation fallback for browser dev mode
@@ -276,20 +258,16 @@ export async function issueCertificate(
   simulationMode: boolean,
   standard: string
 ): Promise<SanitizationCertificate> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<SanitizationCertificate>('issue_certificate', {
-        device,
-        sanitizationMethod,
-        passesCompleted,
-        bytesProcessed,
-        simulationMode,
-        standard,
-      });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulated certificate:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<SanitizationCertificate>('issue_certificate', {
+      device,
+      sanitizationMethod,
+      passesCompleted,
+      bytesProcessed,
+      simulationMode,
+      standard,
+    });
   }
 
   const certId = `cert-sim-${Math.random().toString(36).substring(2, 9)}`;
@@ -351,14 +329,10 @@ export async function issueCertificate(
  * When backend is unavailable, clearly labelled simulation_mode=true results are returned.
  */
 export async function fetchHashStatus(): Promise<HashStatusReport> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const results = await invoke<HashStatusReport>('get_hash_status');
-      return { ...results, backend_available: true };
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulation hash status:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const results = await invoke<HashStatusReport>('get_hash_status');
+    return { ...results, backend_available: true };
   }
 
   // Simulation fallback — clearly labelled, never presented as real forensic results.
@@ -403,16 +377,12 @@ export async function scanAndRecoverArtifacts(
   sourcePath: string = 'disk-vdisk-01',
   simulationMode: boolean = true
 ): Promise<import('../types').RecoveredArtifact[]> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<import('../types').RecoveredArtifact[]>('scan_and_recover_artifacts', {
-        sourcePath,
-        simulationMode,
-      });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulated carved artifacts:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<import('../types').RecoveredArtifact[]>('scan_and_recover_artifacts', {
+      sourcePath,
+      simulationMode,
+    });
   }
 
   const now = new Date().toISOString();
@@ -539,15 +509,11 @@ export async function scanAndRecoverArtifacts(
 export async function executeRecoveryJob(
   job: import('../types').RecoveryJob
 ): Promise<import('../types').RecoveryResult> {
-  try {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      return await invoke<import('../types').RecoveryResult>('execute_recovery_job', {
-        job,
-      });
-    }
-  } catch (err) {
-    console.warn('Tauri API unavailable, returning simulated recovery result:', err);
+  if (isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return await invoke<import('../types').RecoveryResult>('execute_recovery_job', {
+      job,
+    });
   }
 
   const artifacts = await scanAndRecoverArtifacts(job.source_path, job.simulation_mode);

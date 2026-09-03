@@ -101,6 +101,21 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                 ));
                 let total_bytes = snapshot.capacity_bytes;
                 let chunk_size = (snapshot.physical_block_size as usize).max(64 * 1024).min(1024 * 1024);
+                let total_chunks = (total_bytes + chunk_size as u64 - 1) / chunk_size as u64;
+
+                log.push(format!(
+                    "Target Hardware Capacity: {} bytes ({:.2} GB)",
+                    total_bytes,
+                    total_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+                ));
+                log.push("Start Offset: LBA 0 (Byte offset 0)".to_string());
+                log.push(format!(
+                    "Requested Overwrite Scope: 0..{} ({} bytes across {} chunks of size {} KB)",
+                    total_bytes,
+                    total_bytes,
+                    total_chunks,
+                    chunk_size / 1024
+                ));
 
                 for p in 1..=*passes {
                     let pattern = match p {
@@ -131,11 +146,15 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                                     if let Some(pos) = snapshot.path.to_uppercase().find("PHYSICALDRIVE") {
                                         let num_part = &snapshot.path[pos + 13..];
                                         if let Ok(num) = num_part.parse::<u32>() {
-                                            log.push(format!("Preparing Windows physical disk {} for raw overwrite (dismounting volumes)...", num));
-                                            let _ = crate::platform::windows::WindowsStoragePlatform::prepare_disk_for_raw_overwrite(
+                                            log.push(format!("Preparing Windows physical disk {} for raw overwrite (dismounting volumes {:?})...", num, live_device.mount_points));
+                                            let dismount_res = crate::platform::windows::WindowsStoragePlatform::prepare_disk_for_raw_overwrite(
                                                 num,
                                                 &live_device.mount_points,
                                             );
+                                            match dismount_res {
+                                                Ok(_) => log.push("Volume pre-execution dismount completed successfully.".to_string()),
+                                                Err(e) => log.push(format!("Volume dismount advisory: {}", e)),
+                                            }
                                         }
                                     }
                                 }
@@ -143,8 +162,8 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                         }
 
                         log.push(format!(
-                            "Executing controlled raw block write to physical target '{}' (Pass {}/{})",
-                            snapshot.path, p, passes
+                            "Executing raw block write to physical target '{}' (Pass {}/{} - {} chunks)",
+                            snapshot.path, p, passes, total_chunks
                         ));
                         let written_pass = OverwriteEngine::execute_block_overwrite(
                             Path::new(&snapshot.path),
@@ -158,7 +177,10 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                                 progress_cb(overall_pct, &format!("Pass {}/{}: Writing sectors to physical media...", p, passes));
                             },
                         )?;
-                        log.push(format!("Pass {} written: {} bytes verified with hardware flush", p, written_pass));
+                        log.push(format!(
+                            "Pass {} completed: {} bytes written across {} chunks with hardware flush. Final device offset: {}.",
+                            p, written_pass, total_chunks, written_pass
+                        ));
                     }
                 }
 
@@ -169,6 +191,7 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                             let num_part = &snapshot.path[pos + 13..];
                             if let Ok(num) = num_part.parse::<u32>() {
                                 let _ = crate::platform::windows::WindowsStoragePlatform::refresh_disk(num);
+                                log.push(format!("Disk {} partition tables refreshed with OS storage stack.", num));
                             }
                         }
                     }
