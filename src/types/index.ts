@@ -1,4 +1,7 @@
 // VANISH Shared Frontend Types & API Contracts
+// Aryan's module owns: Device, SanitizationPlan, VerificationReport, SanitizationCertificate
+
+// ── Device layer ──────────────────────────────────────────────────────────────
 
 export type MediaType =
   | 'Hdd'
@@ -52,6 +55,8 @@ export interface Device {
   capabilities: DeviceCapability[];
 }
 
+// ── Sanitization layer ────────────────────────────────────────────────────────
+
 export type SanitizationStandard =
   | 'Nist80088Clear'
   | 'Nist80088Purge'
@@ -84,32 +89,102 @@ export interface SanitizationPlan {
   simulation_mode: boolean;
 }
 
-export type LevelStatus =
-  | 'Verified'
-  | 'PartiallyVerified'
-  | 'NotVerified'
-  | 'Failed'
-  | 'Unsupported';
+// ── Verification Engine — Step 9 (new backend shape) ─────────────────────────
 
-export interface LevelVerificationDetail {
-  status: LevelStatus;
-  description: string;
-  sectors_checked?: number;
-  matching_expected_pattern_pct?: number;
-  mean_entropy?: number;
+export type VerificationLevel =
+  | 'L1Logical'
+  | 'L2HostVisible'
+  | 'L3DeviceReported'
+  | 'L4Forensic';
+
+export type LevelStatusCode =
+  | 'PASSED'
+  | 'UNSUPPORTED'
+  | 'FAILED'
+  | 'ERROR';
+
+export interface LevelResult {
+  level: VerificationLevel;
+  status: LevelStatusCode;
+  confidence_pct: number;
+  detail: string;
+  evidence: string[];
 }
 
-export interface VerificationResult {
-  verification_id: string;
+export interface VerificationReport {
   target_id: string;
-  l1_logical: LevelVerificationDetail;
-  l2_host_visible: LevelVerificationDetail;
-  l3_device_reported: LevelVerificationDetail;
-  l4_forensic_validation: LevelVerificationDetail;
-  scope_description: string;
-  warnings: string[];
-  summary_statement: string;
+  levels_executed: VerificationLevel[];
+  results: LevelResult[];
+  overall_passed: boolean;
+  confidence_pct: number;
+  timestamp_utc: string;
+  unsupported_levels: VerificationLevel[];
 }
+
+// ── Attestation / Certificate — Step 10 ──────────────────────────────────────
+
+export type KeyScope = 'session' | 'machine' | 'tpm_architecture_only';
+
+export interface SigningIdentity {
+  key_id: string;
+  public_key_hex: string;
+  scope: KeyScope;
+  created_at: string;
+}
+
+export interface DeviceIdentitySnapshot {
+  stable_id: string;
+  model: string;
+  serial: string;
+  capacity_bytes: number;
+  media_type: string;
+}
+
+export interface OperationSummary {
+  standard: string;
+  method: string;
+  passes_completed: number;
+  bytes_processed: number;
+  simulation_mode: boolean;
+}
+
+export interface SanitizationCertificate {
+  cert_id: string;
+  cert_version: string;
+  issued_at: string;
+  device_identity: DeviceIdentitySnapshot;
+  operation_summary: OperationSummary;
+  verification_result: VerificationReport;
+  audit_chain_root_hash: string;
+  audit_event_count: number;
+  signing_identity: SigningIdentity;
+  signature: string;
+  trust_scope_note: string;
+}
+
+// ── Audit chain ───────────────────────────────────────────────────────────────
+
+export type AuditActor =
+  | { User: string }
+  | 'SystemEngine'
+  | 'AutomatedPolicy';
+
+export interface AuditEvent {
+  event_id: string;
+  sequence_number: number;
+  timestamp: string;
+  actor: AuditActor;
+  operation: string;
+  target_id: string;
+  parameters_json: string;
+  result_status: string;
+  verification_summary?: string;
+  error_message?: string;
+  previous_event_hash: string;
+  current_event_hash: string;
+}
+
+// ── Forensic recovery (Subodeep's contract — shared types only) ───────────────
 
 export type ArtifactFormat =
   | 'Jpeg'
@@ -154,25 +229,7 @@ export interface RecoveredArtifact {
   provenance: ArtifactProvenance;
 }
 
-export type AuditActor =
-  | { User: string }
-  | 'SystemEngine'
-  | 'AutomatedPolicy';
-
-export interface AuditEvent {
-  event_id: string;
-  sequence_number: number;
-  timestamp: string;
-  actor: AuditActor;
-  operation: string;
-  target_id: string;
-  parameters_json: string;
-  result_status: string;
-  verification_summary?: string;
-  error_message?: string;
-  previous_event_hash: string;
-  current_event_hash: string;
-}
+// ── Job tracking ──────────────────────────────────────────────────────────────
 
 export type JobState =
   | 'Created'
