@@ -1,4 +1,4 @@
-import { Device, SanitizationPlan, SanitizationStandard, AuditEvent, VerificationReport, SanitizationCertificate } from '../types';
+import { Device, SanitizationPlan, SanitizationStandard, AuditEvent, VerificationReport, SanitizationCertificate, HashStatusReport } from '../types';
 
 export interface ExecutionSummary {
   plan_id: string;
@@ -309,5 +309,63 @@ export async function issueCertificate(
     },
     signature: sig,
     trust_scope_note: 'SESSION KEY: Proves internal consistency of this VANISH run. Key is discarded on exit.',
+  };
+}
+
+/**
+ * Fetch hashing status from the backend.
+ *
+ * Backend contract (mirrors common/hashing.py output):
+ *   { algorithm: "SHA-256" | "BLAKE3", digest: string, purpose: "canonical_evidence" | "internal_processing",
+ *     source_label: string, computed_at: string, simulation_mode: boolean }
+ *
+ * SHA-256 = canonical evidence hash (artifact identity, image integrity, report verification)
+ * BLAKE3  = high-speed internal hash (large scan throughput, chunk dedup, caching)
+ *
+ * The UI never computes hashes. It only displays what the backend returns.
+ * When backend is unavailable, clearly labelled simulation_mode=true results are returned.
+ */
+export async function fetchHashStatus(): Promise<HashStatusReport> {
+  try {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const results = await invoke<HashStatusReport>('get_hash_status');
+      return { ...results, backend_available: true };
+    }
+  } catch (err) {
+    console.warn('Tauri API unavailable, returning simulation hash status:', err);
+  }
+
+  // Simulation fallback — clearly labelled, never presented as real forensic results.
+  // Digests are zero-filled to make it unambiguous this is not a real hash value.
+  const now = new Date().toISOString();
+  return {
+    backend_available: false,
+    results: [
+      {
+        algorithm: 'SHA-256',
+        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        purpose: 'canonical_evidence',
+        source_label: 'Audit chain tip hash (simulation — no real data hashed)',
+        computed_at: now,
+        simulation_mode: true,
+      },
+      {
+        algorithm: 'SHA-256',
+        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        purpose: 'canonical_evidence',
+        source_label: 'Last recovered artifact identity hash (simulation)',
+        computed_at: now,
+        simulation_mode: true,
+      },
+      {
+        algorithm: 'BLAKE3',
+        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        purpose: 'internal_processing',
+        source_label: 'Storage scan chunk hash (simulation — large block dedup)',
+        computed_at: now,
+        simulation_mode: true,
+      },
+    ],
   };
 }

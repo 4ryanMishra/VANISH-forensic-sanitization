@@ -1,7 +1,9 @@
 import React from 'react';
 import { Download, ShieldCheck } from 'lucide-react';
+import { HashingIntegrity } from '../components/HashingIntegrity';
 
 export const Reports: React.FC = () => {
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -59,6 +61,9 @@ export const Reports: React.FC = () => {
           <span>Tip Hash: 7b3f...91a2</span>
         </div>
       </div>
+
+      <HashingIntegrity />
     </div>
   );
 };
+

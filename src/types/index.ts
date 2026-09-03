@@ -1,7 +1,30 @@
 // VANISH Shared Frontend Types & API Contracts
 // Aryan's module owns: Device, SanitizationPlan, VerificationReport, SanitizationCertificate
 
-// ── Device layer ──────────────────────────────────────────────────────────────
+// ── Hashing layer ─────────────────────────────────────────────────────────────
+// Consumed from backend; no hashing logic lives in the UI.
+// Shape mirrors common/hashing.py output.
+
+export type HashAlgorithm = 'SHA-256' | 'BLAKE3';
+
+export type HashPurpose =
+  | 'canonical_evidence'   // SHA-256 only — artifact identity, image integrity, report verification
+  | 'internal_processing'; // BLAKE3 only — large storage scans, chunk hashing, deduplication, caching
+
+export interface HashResult {
+  algorithm: HashAlgorithm;
+  digest: string;          // hex-encoded digest from backend
+  purpose: HashPurpose;
+  source_label: string;    // human-readable description of what was hashed
+  computed_at: string;     // ISO 8601 timestamp from backend
+  simulation_mode: boolean;
+}
+
+export interface HashStatusReport {
+  results: HashResult[];
+  backend_available: boolean;
+}
+
 
 export type MediaType =
   | 'Hdd'
