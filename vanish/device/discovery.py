@@ -1,7 +1,7 @@
 """
 VANISH Hardware Device Discovery & Protection Layer
-Performs read-only device discovery using lsblk with strict fail-closed
-protection for host OS drives, boot partitions, and root filesystems.
+Performs read-only device discovery using lsblk (Linux) or Get-Disk (Windows)
+with strict fail-closed protection for host OS drives, boot partitions, and root filesystems.
 """
 
 from dataclasses import dataclass, asdict
@@ -39,17 +39,17 @@ class DeviceInfo:
 
 
 class DeviceDiscovery:
-    PROTECTED_MOUNTPOINTS = {"/", "/boot", "/boot/efi", "/home", "/etc", "/var", "/usr", "C:", "C:\\\\"}
+    PROTECTED_MOUNTPOINTS = {"/", "/boot", "/boot/efi", "/home", "/etc", "/var", "/usr", "C:", "C:\\"}
 
     @classmethod
     def list_devices(cls) -> List[DeviceInfo]:
         """
         Enumerate physical and virtual storage devices.
-        Uses lsblk on Linux with strict safety filters.
-        Provides robust cross-platform fallback for testing and Windows.
+        Uses lsblk on Linux and PowerShell Get-Disk on Windows with strict safety filters.
         """
         devices: List[DeviceInfo] = []
 
+        # 1. Linux lsblk parser
         if shutil.which("lsblk"):
             try:
                 cmd = ["lsblk", "-J", "-b", "-o", "NAME,PATH,SIZE,RO,RM,MODEL,TRAN,MOUNTPOINT,TYPE,VENDOR,SERIAL"]
@@ -73,7 +73,6 @@ class DeviceDiscovery:
 
                     is_usb = tran == "usb" or rm or "sandisk" in model.lower() or "usb" in model.lower()
 
-                    # Check mountpoints in device and all children (partitions)
                     all_mounts = []
                     if bd.get("mountpoint"):
                         all_mounts.append(bd.get("mountpoint"))
@@ -92,10 +91,7 @@ class DeviceDiscovery:
                         m in cls.PROTECTED_MOUNTPOINTS or m.startswith("/boot") for m in all_mounts
                     )
 
-                    # Strict safety: internal non-removable or system mounts are ALWAYS protected
                     is_protected = has_system_mount or not is_usb or "nvme" in name or name == "sda"
-
-                    # If it is a dedicated removable USB drive without system mounts, allow target
                     if is_usb and not has_system_mount:
                         is_protected = False
 
@@ -115,39 +111,74 @@ class DeviceDiscovery:
                     )
                 if devices:
                     return devices
-            except Exception as e:
-                # Fallback to simulated / standard devices
+            except Exception:
                 pass
 
-        # Fallback environment / Lab devices (e.g. on Windows or synthetic test lab)
+        # 2. Windows PowerShell Get-Disk parser
+        if platform.system().lower() == "windows":
+            try:
+                ps_cmd = (
+                    "Get-Disk | ForEach-Object { "
+                    "$d = $_; "
+                    "$parts = Get-Partition -DiskNumber $d.Number -ErrorAction SilentlyContinue; "
+                    "$letters = ($parts | Where-Object { $_.DriveLetter } | ForEach-Object { $_.DriveLetter + ':' }) -join ','; "
+                    "[PSCustomObject]@{ "
+                    "Number = $d.Number; "
+                    "FriendlyName = $d.FriendlyName; "
+                    "SerialNumber = $d.SerialNumber; "
+                    "Size = $d.Size; "
+                    "BusType = $d.BusType; "
+                    "IsBoot = $d.IsBoot; "
+                    "IsSystem = $d.IsSystem; "
+                    "DriveLetters = $letters "
+                    "} } | ConvertTo-Json -Compress"
+                )
+                res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, check=True)
+                raw_out = res.stdout.strip()
+                if raw_out:
+                    disk_items = json.loads(raw_out)
+                    if isinstance(disk_items, dict):
+                        disk_items = [disk_items]
+
+                    for d in disk_items:
+                        num = d.get("Number", 0)
+                        model = d.get("FriendlyName", f"Disk #{num}").strip()
+                        size_bytes = int(d.get("Size") or 0)
+                        bus_type = str(d.get("BusType", "")).lower()
+                        is_boot = bool(d.get("IsBoot"))
+                        is_system = bool(d.get("IsSystem"))
+                        drive_letters = str(d.get("DriveLetters", ""))
+                        serial = str(d.get("SerialNumber", "")).strip()
+
+                        is_usb = "usb" in bus_type or "sandisk" in model.lower() or "cruzer" in model.lower()
+                        has_c = "c:" in drive_letters.lower()
+                        is_protected = is_boot or is_system or has_c or not is_usb
+
+                        path = f"\\\\.\\PhysicalDrive{num}"
+                        name = f"PhysicalDrive{num}"
+
+                        devices.append(
+                            DeviceInfo(
+                                path=path,
+                                name=name,
+                                model=f"{model} ({drive_letters or 'RAW'})",
+                                size_bytes=size_bytes,
+                                is_protected=is_protected,
+                                is_usb=is_usb,
+                                mountpoint=drive_letters or None,
+                                vendor="SanDisk" if "sandisk" in model.lower() else "Generic",
+                                serial=serial,
+                                tran=bus_type,
+                            )
+                        )
+            except Exception:
+                pass
+
+        # 3. Always include Synthetic Forensic Lab Image
         lab_img_path = os.path.abspath("test-data/virtual-disks/vanish_lab_image.img")
         lab_img_size = os.path.getsize(lab_img_path) if os.path.exists(lab_img_path) else 16 * 1024 * 1024
 
-        devices = [
-            DeviceInfo(
-                path="/dev/nvme0n1",
-                name="nvme0n1",
-                model="Samsung SSD 980 PRO 512GB (OS Root)",
-                size_bytes=512 * 1024 * 1024 * 1024,
-                is_protected=True,
-                is_usb=False,
-                mountpoint="/",
-                vendor="Samsung",
-                serial="S5GXNF0R123456",
-                tran="nvme",
-            ),
-            DeviceInfo(
-                path="/dev/sdb",
-                name="sdb",
-                model="SanDisk Ultra USB 3.0 (16 GB Lab Target)",
-                size_bytes=16 * 1000 * 1000 * 1000,
-                is_protected=False,
-                is_usb=True,
-                mountpoint="/media/usb",
-                vendor="SanDisk",
-                serial="4C530001230415116032",
-                tran="usb",
-            ),
+        devices.append(
             DeviceInfo(
                 path=lab_img_path,
                 name="vanish_lab_image.img",
@@ -159,8 +190,9 @@ class DeviceDiscovery:
                 vendor="VirtualLab",
                 serial="VN-IMG-2026-0819",
                 tran="virtual",
-            ),
-        ]
+            )
+        )
+
         return devices
 
     @classmethod

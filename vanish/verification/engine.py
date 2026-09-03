@@ -64,7 +64,7 @@ class VerificationEngine:
                     all_zero = False
                     evidence.append("Head sector sample contains non-zero bytes!")
                 else:
-                    evidence.append(f"Head sample ({sample_len // (1024*1024)} MB): all bytes 0x00 ✓")
+                    evidence.append(f"Head sample ({sample_len // (1024*1024)} MB): all bytes 0x00 [OK]")
 
                 # Sample tail
                 if total_size > sample_len:
@@ -74,7 +74,7 @@ class VerificationEngine:
                         all_zero = False
                         evidence.append("Tail sector sample contains non-zero bytes!")
                     else:
-                        evidence.append(f"Tail sample ({sample_len // (1024*1024)} MB): all bytes 0x00 ✓")
+                        evidence.append(f"Tail sample ({sample_len // (1024*1024)} MB): all bytes 0x00 [OK]")
         except Exception as e:
             return {
                 "level": "L2 Host-Visible Blocks",
@@ -104,7 +104,7 @@ class VerificationEngine:
         if count == 0:
             evidence.append(f"Deep signature carving scan on '{device.path}' recovered 0 files.")
             evidence.append("No PDF, JPEG, PNG, or filesystem slack remnants detected.")
-            evidence.append("Forensic unrecoverability CERTIFIED at L4 depth ✓")
+            evidence.append("Forensic unrecoverability CERTIFIED at L4 depth [OK]")
             return {
                 "level": "L4 Forensic Carving Handshake",
                 "passed": True,

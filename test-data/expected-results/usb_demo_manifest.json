@@ -1,0 +1,30 @@
+{
+  "target_mount": "E:\\",
+  "device_info": {
+    "path": "\\\\.\\PhysicalDrive1",
+    "name": "PhysicalDrive1",
+    "model": "SanDisk Cruzer Blade (E:)",
+    "size_bytes": 15664676864,
+    "is_protected": false,
+    "is_usb": true,
+    "mountpoint": "E:",
+    "vendor": "SanDisk",
+    "serial": "4C530001210704113003",
+    "tran": "usb"
+  },
+  "timestamp_seeded": "2026-09-03 14:51:41 UTC",
+  "artifacts": [
+    {
+      "file_name": "confidential_report.pdf",
+      "file_type": "PDF",
+      "size_bytes": 494,
+      "sha256": "9773c9d188ebbea4973aed382e2faff1c67016ec291c2073bc294950968022a4"
+    },
+    {
+      "file_name": "surveillance_capture.jpg",
+      "file_type": "JPEG",
+      "size_bytes": 8237,
+      "sha256": "7d414154d81c376d7a0390fc9821cff8dec258cdc9e9dc515eda6bdb5a4c7e82"
+    }
+  ]
+}
