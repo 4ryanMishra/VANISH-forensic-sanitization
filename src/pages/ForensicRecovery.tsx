@@ -1,67 +1,38 @@
 import React, { useState } from 'react';
 import { FileCode, Play } from 'lucide-react';
 import { RecoveredArtifact } from '../types';
+import { scanAndRecoverArtifacts } from '../services/api';
 
 export const ForensicRecovery: React.FC = () => {
   const [scanning, setScanning] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [artifacts, setArtifacts] = useState<RecoveredArtifact[]>([]);
 
-  const handleStartScan = () => {
+  const handleStartScan = async () => {
     setScanning(true);
     setProgress(0);
     setArtifacts([]);
 
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setScanning(false);
-          setArtifacts([
-            {
-              artifact_id: 'art-001-jpg',
-              source_id: 'disk-vdisk-01',
-              source_offsets: [[409600, 614400]],
-              format: 'Jpeg',
-              original_path: 'DCIM/IMG_20260815.JPG',
-              extracted_path: 'recovered/IMG_20260815_carved.jpg',
-              size_bytes: 204800,
-              sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-              validation_status: 'Valid',
-              confidence_score: 0.98,
-              provenance: {
-                source_id: 'disk-vdisk-01',
-                detection_method: 'ContiguousSignature',
-                sector_ranges: [[800, 1200]],
-                entropy_score: 7.84,
-                header_magic: 'FF D8 FF E0',
-              },
-            },
-            {
-              artifact_id: 'art-002-pdf',
-              source_id: 'disk-vdisk-01',
-              source_offsets: [[1048576, 1572864]],
-              format: 'Pdf',
-              original_path: 'Documents/Confidential_Report.pdf',
-              extracted_path: 'recovered/Confidential_Report_recon.pdf',
-              size_bytes: 524288,
-              sha256: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
-              validation_status: 'Valid',
-              confidence_score: 0.92,
-              provenance: {
-                source_id: 'disk-vdisk-01',
-                detection_method: 'FragmentedReconstruction',
-                sector_ranges: [[2048, 2560], [3072, 3584]],
-                entropy_score: 7.21,
-                header_magic: '25 50 44 46',
-              },
-            },
-          ]);
-          return 100;
+        if (prev >= 90) {
+          return 90;
         }
-        return prev + 20;
+        return prev + 15;
       });
-    }, 300);
+    }, 150);
+
+    try {
+      const recovered = await scanAndRecoverArtifacts('disk-vdisk-01', true);
+      clearInterval(interval);
+      setProgress(100);
+      setArtifacts(recovered);
+    } catch (err) {
+      console.error('Forensic recovery failed:', err);
+      clearInterval(interval);
+    } finally {
+      setScanning(false);
+    }
   };
 
   return (

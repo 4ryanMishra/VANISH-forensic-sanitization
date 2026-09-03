@@ -1,0 +1,29 @@
+{
+  "disk_image": "test-data/virtual-disks/vanish_lab_image.img",
+  "size_bytes": 16777216,
+  "artifacts": [
+    {
+      "type": "JPEG",
+      "offset": 1048576,
+      "size": 16429,
+      "sha256": "ee4b2411fe17c4ec68b772455cc8398a4f36752cc56b592c73e17079df1e4ac2",
+      "status": "ContiguousValid"
+    },
+    {
+      "type": "PDF",
+      "head_offset": 2097152,
+      "tail_offset": 2105344,
+      "gap_bytes": 8192,
+      "size": 223,
+      "sha256": "4a586439b1189e375644e1f1949565b3cd051937109c6e14dc161109e0b0f0bc",
+      "status": "FragmentedReconstructed"
+    },
+    {
+      "type": "PNG",
+      "offset": 3145728,
+      "size": 62,
+      "sha256": "81f31fe9a32892897860a139178a2f49bdd2525c666a59e993f6e0892263bf1c",
+      "status": "ContiguousValid"
+    }
+  ]
+}
