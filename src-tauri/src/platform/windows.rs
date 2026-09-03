@@ -56,33 +56,15 @@ impl WindowsStoragePlatform {
     }
 
     /// Prepares a physical disk on Windows for full-disk raw block overwrite by locking and dismounting
-    /// all volume handles in Win32, removing drive letter mounts, and clearing filesystem locks.
-    pub fn prepare_disk_for_raw_overwrite(disk_number: u32, mount_points: &[String]) -> Result<()> {
-        // 1. Direct Win32 FSCTL_LOCK_VOLUME and FSCTL_DISMOUNT_VOLUME on each drive letter
+    /// all volume handles in Win32 without ejecting the physical USB bus.
+    pub fn prepare_disk_for_raw_overwrite(_disk_number: u32, mount_points: &[String]) -> Result<()> {
+        // Direct Win32 FSCTL_LOCK_VOLUME and FSCTL_DISMOUNT_VOLUME on each drive letter handle
         for mp in mount_points {
             let drive_letter = mp.trim_end_matches('\\').trim_end_matches(':');
             if !drive_letter.is_empty() {
                 let _ = win32_storage::lock_and_dismount_volume(drive_letter);
             }
         }
-
-        // 2. Remove mount point via mountvol /P
-        for mp in mount_points {
-            let drive_letter = mp.trim_end_matches('\\').trim_end_matches(':');
-            if !drive_letter.is_empty() {
-                let _ = Command::new("mountvol")
-                    .args([&format!("{}:", drive_letter), "/P"])
-                    .output();
-            }
-        }
-
-        // 3. Use PowerShell Clear-Disk to unbind filesystem partitions and wipe partition structures
-        let clear_script = format!(
-            "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'SilentlyContinue'; Clear-Disk -Number {} -RemoveData -RemoveOEM -Confirm:$false",
-            disk_number
-        );
-        let _ = Self::exec_powershell_encoded(&clear_script);
-
         Ok(())
     }
 
@@ -215,10 +197,8 @@ pub mod win32_storage {
     pub fn prepare_physical_handle_for_raw_write(handle: HANDLE) -> Result<(), std::io::Error> {
         // 1. Allow Extended DASD I/O (Bypasses Sector 0 / partition table write blocking)
         let _ = send_ioctl(handle, FSCTL_ALLOW_EXTENDED_DASD_IO);
-        // 2. Lock volume/disk
+        // 2. Lock physical drive handle to prevent concurrent write collisions
         let _ = send_ioctl(handle, FSCTL_LOCK_VOLUME);
-        // 3. Dismount filesystem
-        let _ = send_ioctl(handle, FSCTL_DISMOUNT_VOLUME);
         Ok(())
     }
 }
