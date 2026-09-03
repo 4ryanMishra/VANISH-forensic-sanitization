@@ -34,3 +34,10 @@ test-data/virtual-disks/*.vmdk
 !test-data/virtual-disks/.gitkeep
 !test-data/sample-files/.gitkeep
 !test-data/expected-results/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.db

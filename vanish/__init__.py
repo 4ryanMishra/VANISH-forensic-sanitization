@@ -1,0 +1,1 @@
+"""VANISH Package Module."""
