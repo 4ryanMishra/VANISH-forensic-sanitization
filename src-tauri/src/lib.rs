@@ -253,6 +253,82 @@ pub fn scan_and_recover_artifacts(
 }
 
 #[tauri::command]
+pub fn execute_recovery_job(
+    state: tauri::State<AppState>,
+    job: common::recovery::RecoveryJob,
+) -> Result<common::recovery::RecoveryResult, String> {
+    use forensic::ForensicEngine;
+    let start_time = std::time::Instant::now();
+
+    let (data, source_label, is_sim) = if job.simulation_mode || job.source_path.is_empty() || job.source_path.starts_with("disk-") {
+        let mut sim_buf = vec![0u8; 1024 * 1024];
+        // Embed sample JPEG
+        let jpeg_header = &[0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00];
+        let jpeg_sof = &[0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x01, 0x00, 0x01, 0x00, 0x01, 0x01, 0x11, 0x00];
+        let jpeg_sos = &[0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00];
+        let jpeg_eoi = &[0xFF, 0xD9];
+        let mut jpg_bytes = Vec::new();
+        jpg_bytes.extend_from_slice(jpeg_header);
+        jpg_bytes.extend_from_slice(jpeg_sof);
+        jpg_bytes.extend_from_slice(jpeg_sos);
+        jpg_bytes.extend_from_slice(&[0x12, 0x34, 0x56, 0x78; 32]);
+        jpg_bytes.extend_from_slice(jpeg_eoi);
+        sim_buf[4096..4096 + jpg_bytes.len()].copy_from_slice(&jpg_bytes);
+
+        // Embed sample PDF
+        let pdf_sample = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page >>\nendobj\nxref\n0 4\n0000000000 65535 f \ntrailer\n<< /Root 1 0 R >>\nstartxref\n180\n%%EOF\n";
+        sim_buf[32768..32768 + pdf_sample.len()].copy_from_slice(pdf_sample);
+
+        // Embed sample PNG
+        let png_header = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let png_ihdr = &[0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE];
+        let png_idat = &[0x00, 0x00, 0x00, 0x04, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01];
+        let png_iend = &[0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82];
+        let mut png_bytes = Vec::new();
+        png_bytes.extend_from_slice(png_header);
+        png_bytes.extend_from_slice(png_ihdr);
+        png_bytes.extend_from_slice(png_idat);
+        png_bytes.extend_from_slice(png_iend);
+        sim_buf[65536..65536 + png_bytes.len()].copy_from_slice(&png_bytes);
+
+        (sim_buf, "disk-vdisk-01 (Virtual Disk Image)".to_string(), true)
+    } else {
+        let reader = forensic::imaging::RawImageReader::open(&job.source_path).map_err(|e| e.to_string())?;
+        (reader.read_all().map_err(|e| e.to_string())?, job.source_path.clone(), false)
+    };
+
+    let artifacts = ForensicEngine::scan_bytes(&data, &source_label);
+    let duration = start_time.elapsed().as_millis() as u64;
+
+    if let Ok(mut chain) = state.audit_chain.lock() {
+        chain.append_event(
+            common::audit::AuditActor::SystemEngine,
+            format!("FORENSIC_CARVING_SCAN: {} artifacts recovered", artifacts.len()),
+            source_label.clone(),
+            serde_json::json!({
+                "job_id": job.job_id,
+                "source": source_label,
+                "artifacts_recovered": artifacts.len(),
+                "simulation_mode": is_sim,
+            }).to_string(),
+            "SUCCESS".to_string(),
+            Some(format!("Artifacts recovered: {}", artifacts.len())),
+            None,
+        );
+    }
+
+    Ok(common::recovery::RecoveryResult {
+        job_id: job.job_id,
+        source_id: source_label,
+        total_scanned_bytes: data.len() as u64,
+        artifacts,
+        simulation_mode: is_sim,
+        execution_time_ms: duration,
+        summary_notes: format!("Scan completed across {} bytes with read-only acquisition.", data.len()),
+    })
+}
+
+#[tauri::command]
 pub fn forensic_recovery_attempt(
     device: Device,
     simulation_mode: bool,
@@ -283,6 +359,7 @@ pub fn run() {
             verify_certificate,
             get_audit_log,
             scan_and_recover_artifacts,
+            execute_recovery_job,
             forensic_recovery_attempt
         ])
         .run(tauri::generate_context!())

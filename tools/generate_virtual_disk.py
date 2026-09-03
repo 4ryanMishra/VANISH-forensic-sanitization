@@ -46,7 +46,7 @@ def generate_virtual_disk(output_path="test-data/virtual-disks/vanish_lab_image.
         "status": "ContiguousValid"
     })
 
-    # 3. Inject Fragmented PDF: Head at offset 0x200000 (2MB), Gap of 8KB, Tail at offset 0x203000
+    # 3. Inject Fragmented PDF: Head at offset 0x200000 (2MB), Gap of 8KB, Tail at offset 0x202000
     pdf_head_offset = 2097152 # 2MB
     pdf_head = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
     buf[pdf_head_offset:pdf_head_offset + len(pdf_head)] = pdf_head
