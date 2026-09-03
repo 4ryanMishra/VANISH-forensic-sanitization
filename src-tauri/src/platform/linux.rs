@@ -64,6 +64,7 @@ impl LinuxStoragePlatform {
                     boot_device: false,
                     system_disk: false,
                     read_only: false,
+                    is_simulated: false,
                     capabilities: vec![DeviceCapability::HostBlockOverwrite],
                 };
                 devices.push(dev);

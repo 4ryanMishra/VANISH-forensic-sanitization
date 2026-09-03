@@ -30,6 +30,7 @@ impl MockPlatformStorage {
                 boot_device: false,
                 system_disk: false,
                 read_only: false,
+                is_simulated: false,
                 capabilities: vec![
                     DeviceCapability::HostBlockOverwrite,
                     DeviceCapability::SmartHealthQuery,
@@ -50,6 +51,7 @@ impl MockPlatformStorage {
                 boot_device: false,
                 system_disk: false,
                 read_only: false,
+                is_simulated: true,
                 capabilities: vec![
                     DeviceCapability::NvmeSanitizeBlockErase,
                     DeviceCapability::NvmeSanitizeCryptoErase,
@@ -75,6 +77,7 @@ impl MockPlatformStorage {
                 boot_device: false,
                 system_disk: false,
                 read_only: false,
+                is_simulated: true,
                 capabilities: vec![
                     DeviceCapability::HostBlockOverwrite,
                     DeviceCapability::TrimSupported,
@@ -95,6 +98,7 @@ impl MockPlatformStorage {
                 boot_device: true,
                 system_disk: true,
                 read_only: false,
+                is_simulated: false,
                 capabilities: vec![
                     DeviceCapability::NvmeSanitizeBlockErase,
                     DeviceCapability::NvmeSanitizeCryptoErase,

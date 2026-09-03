@@ -62,6 +62,11 @@ export const Devices: React.FC = () => {
                   <div>
                     <div className="flex items-center space-x-3">
                       <h4 className="text-base font-bold text-white">{device.model}</h4>
+                      {device.is_simulated && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider border border-amber-500/30">
+                          Simulation Mode
+                        </span>
+                      )}
                       {isProtected && (
                         <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30">
                           <Lock className="w-3 h-3" />

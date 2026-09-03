@@ -57,8 +57,8 @@ export const Reports: React.FC = () => {
         </div>
 
         <div className="pt-4 border-t border-gray-800 flex items-center justify-between text-xs font-mono text-gray-500">
-          <span>Digital Signature: Ed25519 Verified</span>
-          <span>Tip Hash: 7b3f...91a2</span>
+          <span>Digital Signature: [NO ACTIVE CERTIFICATE DATA]</span>
+          <span>Tip Hash: [NOT COMPUTED]</span>
         </div>
       </div>
 

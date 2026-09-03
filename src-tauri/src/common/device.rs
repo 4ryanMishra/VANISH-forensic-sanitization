@@ -56,5 +56,7 @@ pub struct Device {
     pub boot_device: bool,
     pub system_disk: bool,
     pub read_only: bool,
+    pub is_simulated: bool,
     pub capabilities: Vec<DeviceCapability>,
 }
+

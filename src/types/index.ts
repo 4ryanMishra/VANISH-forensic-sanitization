@@ -75,6 +75,7 @@ export interface Device {
   boot_device: boolean;
   system_disk: boolean;
   read_only: boolean;
+  is_simulated: boolean;
   capabilities: DeviceCapability[];
 }
 

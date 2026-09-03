@@ -27,6 +27,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: false,
     system_disk: false,
     read_only: false,
+    is_simulated: false,
     capabilities: ['HostBlockOverwrite'],
   },
   {
@@ -44,6 +45,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: false,
     system_disk: false,
     read_only: false,
+    is_simulated: true,
     capabilities: ['NvmeSanitizeBlockErase', 'NvmeSanitizeCryptoErase', 'NvmeSanitizeOverwrite', 'TrimSupported'],
   },
   {
@@ -61,6 +63,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: false,
     system_disk: false,
     read_only: false,
+    is_simulated: true,
     capabilities: ['HostBlockOverwrite', 'TrimSupported'],
   },
   {
@@ -78,6 +81,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: true,
     system_disk: true,
     read_only: false,
+    is_simulated: false,
     capabilities: ['NvmeSanitizeBlockErase', 'NvmeSanitizeCryptoErase', 'TrimSupported'],
   },
 ];

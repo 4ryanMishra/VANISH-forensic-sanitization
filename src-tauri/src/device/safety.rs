@@ -70,6 +70,7 @@ mod tests {
             boot_device: true,
             system_disk: true,
             read_only: false,
+            is_simulated: false,
             capabilities: vec![],
         };
 
@@ -94,6 +95,7 @@ mod tests {
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: false,
             capabilities: vec![],
         };
 
@@ -117,6 +119,7 @@ mod tests {
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: false,
             capabilities: vec![],
         };
 
