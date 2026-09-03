@@ -75,8 +75,8 @@ export const Sanitization: React.FC = () => {
     setExecutionError(null);
 
     const interval = setInterval(() => {
-      setProgress((prev) => (prev >= 90 ? 90 : prev + 15));
-    }, 200);
+      setProgress((prev) => (prev >= 95 ? 95 : prev + 4));
+    }, 800);
 
     try {
       const result = await executeSanitizationPlan(plan, selectedDevice);

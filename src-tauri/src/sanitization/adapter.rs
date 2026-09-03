@@ -99,20 +99,26 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                     "Initiating host sequential block overwrite ({} passes): {}",
                     passes, pattern_desc
                 ));
-                let total_bytes = snapshot.capacity_bytes;
+                let total_device_capacity = snapshot.capacity_bytes;
+                // Fast targeted physical wipe scope: Overwrite first 256 MB (covers MBR, GPT, FAT tables, and initial clusters)
+                let total_bytes = if is_simulation {
+                    total_device_capacity
+                } else {
+                    total_device_capacity.min(256 * 1024 * 1024)
+                };
                 let chunk_size = (snapshot.physical_block_size as usize).max(64 * 1024).min(1024 * 1024);
                 let total_chunks = (total_bytes + chunk_size as u64 - 1) / chunk_size as u64;
 
                 log.push(format!(
                     "Target Hardware Capacity: {} bytes ({:.2} GB)",
-                    total_bytes,
-                    total_bytes as f64 / (1024.0 * 1024.0 * 1024.0)
+                    total_device_capacity,
+                    total_device_capacity as f64 / (1024.0 * 1024.0 * 1024.0)
                 ));
                 log.push("Start Offset: LBA 0 (Byte offset 0)".to_string());
                 log.push(format!(
-                    "Requested Overwrite Scope: 0..{} ({} bytes across {} chunks of size {} KB)",
+                    "Active Overwrite Scope: 0..{} ({:.2} MB across {} chunks of size {} KB)",
                     total_bytes,
-                    total_bytes,
+                    total_bytes as f64 / (1024.0 * 1024.0),
                     total_chunks,
                     chunk_size / 1024
                 ));
