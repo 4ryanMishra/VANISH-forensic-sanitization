@@ -491,22 +491,17 @@ impl VerificationEngine {
                 limitations,
             }
         } else {
-            // REAL MODE: Read actual physical device sectors
-            let sample_buffer = match std::fs::read(&device.path) {
+            // REAL MODE: Read actual physical device sectors with sector alignment
+            let sample_buffer = match Self::read_physical_sectors(&device.path, 1024 * 1024, device.logical_block_size as usize) {
                 Ok(data) => {
                     limitations.push("Scanned host-accessible addressable sectors; retired/spare flash cells cannot be addressed over host bus.".to_string());
-                    let max_scan = 1024 * 1024; // Scan up to 1MB
-                    if data.len() > max_scan {
-                        data[..max_scan].to_vec()
-                    } else {
-                        data
-                    }
+                    data
                 }
                 Err(e) => {
                     evidence.push(format!("Target path: '{}'", device.path));
                     evidence.push(format!("Physical read failure: {}", e));
                     evidence.push("OS error prevented reading raw sector stream from physical target.".to_string());
-                    evidence.push("Reason L4 could not be completed: Insufficient device read access or device detached.".to_string());
+                    evidence.push("Reason L4 could not be completed: Insufficient device read access, parameter alignment error, or device detached.".to_string());
                     limitations.push(format!("Physical sector read error: {}", e));
 
                     return VerificationResult {
@@ -555,6 +550,46 @@ impl VerificationEngine {
             }
         }
     }
+
+    /// Read physical raw sectors in sector-aligned chunks (immune to Windows Error 87)
+    pub fn read_physical_sectors(path: &str, max_bytes: usize, block_size: usize) -> anyhow::Result<Vec<u8>> {
+        let mut file = File::open(path)
+            .map_err(|e| anyhow::anyhow!("Failed to open physical target '{}' for sector read: {}", path, e))?;
+
+        file.seek(SeekFrom::Start(0))
+            .map_err(|e| anyhow::anyhow!("Failed to seek to LBA 0 on '{}': {}", path, e))?;
+
+        let sector = if block_size == 0 { 512 } else { block_size };
+        let aligned_max = ((max_bytes + sector - 1) / sector) * sector;
+        let mut buffer = vec![0u8; aligned_max];
+        let mut total_read = 0;
+
+        while total_read < aligned_max {
+            let chunk = (64 * 1024).min(aligned_max - total_read);
+            let chunk = (chunk / sector) * sector;
+            if chunk == 0 {
+                break;
+            }
+            match file.read(&mut buffer[total_read..total_read + chunk]) {
+                Ok(0) => break,
+                Ok(n) => total_read += n,
+                Err(e) => {
+                    if total_read > 0 {
+                        break;
+                    } else {
+                        return Err(anyhow::anyhow!("Raw sector read error on '{}': {}", path, e));
+                    }
+                }
+            }
+        }
+
+        if total_read == 0 {
+            return Err(anyhow::anyhow!("Zero bytes read from raw physical device '{}'", path));
+        }
+
+        buffer.truncate(total_read);
+        Ok(buffer)
+    }
 }
 
 impl Default for VerificationEngine {
@@ -601,5 +636,31 @@ fn compute_confidence_score(results: &[VerificationResult]) -> u8 {
     }
 
     ((weighted_score / total_weight) * 100.0).round().min(100.0) as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_read_physical_sectors_aligned() {
+        let mut temp = NamedTempFile::new().unwrap();
+        let payload = vec![0xABu8; 4096];
+        temp.write_all(&payload).unwrap();
+        temp.flush().unwrap();
+
+        let path = temp.path().to_str().unwrap();
+        let read_bytes = VerificationEngine::read_physical_sectors(path, 1024, 512).unwrap();
+        assert_eq!(read_bytes.len(), 1024);
+        assert!(read_bytes.iter().all(|&b| b == 0xAB));
+    }
+
+    #[test]
+    fn test_read_physical_sectors_nonexistent() {
+        let res = VerificationEngine::read_physical_sectors("non_existent_disk_device_9999", 512, 512);
+        assert!(res.is_err());
+    }
 }
 

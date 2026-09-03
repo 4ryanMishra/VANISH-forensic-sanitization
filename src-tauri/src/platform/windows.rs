@@ -55,6 +55,39 @@ impl WindowsStoragePlatform {
         Ok(vec![])
     }
 
+    /// Prepares a physical disk on Windows for full-disk raw block overwrite by dismounting
+    /// volumes and clearing filesystem write locks on Sector 0 and partitions.
+    pub fn prepare_disk_for_raw_overwrite(disk_number: u32, mount_points: &[String]) -> Result<()> {
+        // 1. Dismount volume mount points to release filesystem locks
+        for mp in mount_points {
+            let drive_letter = mp.trim_end_matches('\\').trim_end_matches(':');
+            if !drive_letter.is_empty() {
+                let _ = Command::new("mountvol")
+                    .args([&format!("{}:", drive_letter), "/P"])
+                    .output();
+            }
+        }
+
+        // 2. Use PowerShell Clear-Disk to unbind filesystem partitions and wipe partition structures
+        let clear_script = format!(
+            "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'SilentlyContinue'; Clear-Disk -Number {} -RemoveData -RemoveOEM -Confirm:$false",
+            disk_number
+        );
+        let _ = Self::exec_powershell_encoded(&clear_script);
+
+        Ok(())
+    }
+
+    /// Refresh Windows partition table cache after physical wipe
+    pub fn refresh_disk(disk_number: u32) -> Result<()> {
+        let update_script = format!(
+            "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'SilentlyContinue'; Update-Disk -Number {}",
+            disk_number
+        );
+        let _ = Self::exec_powershell_encoded(&update_script);
+        Ok(())
+    }
+
     /// Query Windows Storage Module using Get-Disk & Get-Partition
     fn query_get_disk() -> Result<Vec<WindowsDiskRaw>> {
         let script = r#"

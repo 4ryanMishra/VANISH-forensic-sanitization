@@ -123,6 +123,25 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                             },
                         )?;
                     } else {
+                        // On Windows, prepare physical target on first pass (dismount volumes and unlock MBR/Sector 0)
+                        if p == 1 {
+                            #[cfg(target_os = "windows")]
+                            {
+                                if snapshot.path.to_uppercase().contains("PHYSICALDRIVE") {
+                                    if let Some(pos) = snapshot.path.to_uppercase().find("PHYSICALDRIVE") {
+                                        let num_part = &snapshot.path[pos + 13..];
+                                        if let Ok(num) = num_part.parse::<u32>() {
+                                            log.push(format!("Preparing Windows physical disk {} for raw overwrite (dismounting volumes)...", num));
+                                            let _ = crate::platform::windows::WindowsStoragePlatform::prepare_disk_for_raw_overwrite(
+                                                num,
+                                                &live_device.mount_points,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         log.push(format!(
                             "Executing controlled raw block write to physical target '{}' (Pass {}/{})",
                             snapshot.path, p, passes
@@ -140,6 +159,18 @@ impl DeviceSanitizationAdapter for HostOverwriteAdapter {
                             },
                         )?;
                         log.push(format!("Pass {} written: {} bytes verified with hardware flush", p, written_pass));
+                    }
+                }
+
+                #[cfg(target_os = "windows")]
+                {
+                    if !is_simulation && snapshot.path.to_uppercase().contains("PHYSICALDRIVE") {
+                        if let Some(pos) = snapshot.path.to_uppercase().find("PHYSICALDRIVE") {
+                            let num_part = &snapshot.path[pos + 13..];
+                            if let Ok(num) = num_part.parse::<u32>() {
+                                let _ = crate::platform::windows::WindowsStoragePlatform::refresh_disk(num);
+                            }
+                        }
                     }
                 }
 
