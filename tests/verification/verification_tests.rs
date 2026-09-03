@@ -219,4 +219,70 @@ mod tests {
         assert!(!l4.detail.contains("100% unrecoverable"), "Must not claim absolute 100% unrecoverable");
         assert!(l4.detail.contains("0 target artifacts recovered"), "Must use NTRO spec-compliant wording");
     }
+
+    #[test]
+    fn test_l4_real_read_failure_returns_not_available() {
+        let engine = VerificationEngine::new();
+        let mut device = make_sandisk_device();
+        device.path = "/tmp/non_existent_unreadable_drive_99999.raw".to_string();
+
+        let req = VerificationRequest {
+            device,
+            levels_requested: vec![VerificationLevel::L4Forensic],
+            sanitization_method: "HostBlockOverwrite".to_string(),
+            simulation_mode: false, // REAL MODE
+        };
+        let report = engine.run(&req);
+        let l4 = report.results.iter().find(|r| r.level == VerificationLevel::L4Forensic).unwrap();
+
+        assert_eq!(l4.status, VerificationStatus::NotAvailable, "Real read failure must yield NotAvailable, never PASS");
+        assert_eq!(l4.confidence_pct, 0);
+        assert!(l4.evidence.iter().any(|e| e.contains("Physical read failure")));
+        assert!(l4.evidence.iter().any(|e| e.contains("Reason L4 could not be completed")));
+    }
+
+    #[test]
+    fn test_l4_real_successful_read_zero_artifacts_returns_pass() {
+        use std::io::Write;
+        use tempfile::NamedTemporaryFile;
+
+        let mut tmp = NamedTemporaryFile::new().expect("create tempfile");
+        tmp.write_all(&vec![0u8; 64 * 1024]).expect("write zeroes");
+        let tmp_path = tmp.path().to_str().unwrap().to_string();
+
+        let engine = VerificationEngine::new();
+        let mut device = make_sandisk_device();
+        device.path = tmp_path;
+
+        let req = VerificationRequest {
+            device,
+            levels_requested: vec![VerificationLevel::L4Forensic],
+            sanitization_method: "HostBlockOverwrite".to_string(),
+            simulation_mode: false, // REAL MODE with accessible zeroed file
+        };
+        let report = engine.run(&req);
+        let l4 = report.results.iter().find(|r| r.level == VerificationLevel::L4Forensic).unwrap();
+
+        assert_eq!(l4.status, VerificationStatus::Pass);
+        assert_eq!(l4.confidence_pct, 95);
+        assert!(l4.detail.contains("0 target artifacts recovered"));
+        assert!(!l4.evidence.iter().any(|e| e.contains("[SIMULATION]")), "Real mode must not have [SIMULATION] labels");
+    }
+
+    #[test]
+    fn test_l4_simulation_buffer_has_simulation_evidence() {
+        let engine = VerificationEngine::new();
+        let device = make_sandisk_device();
+        let req = VerificationRequest {
+            device,
+            levels_requested: vec![VerificationLevel::L4Forensic],
+            sanitization_method: "SinglePassZero".to_string(),
+            simulation_mode: true,
+        };
+        let report = engine.run(&req);
+        let l4 = report.results.iter().find(|r| r.level == VerificationLevel::L4Forensic).unwrap();
+
+        assert_eq!(l4.status, VerificationStatus::Pass);
+        assert!(l4.evidence.iter().all(|e| e.contains("[SIMULATION]") || e.is_empty()), "All L4 simulation evidence items must be clearly marked [SIMULATION]");
+    }
 }

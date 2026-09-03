@@ -16,10 +16,10 @@ impl MockPlatformStorage {
     pub fn enumerate_mock_devices(&self) -> Result<Vec<Device>> {
         let fixtures = vec![
             Device {
-                stable_id: "disk-sandisk-16g".to_string(),
-                path: "/dev/sdb".to_string(),
-                model: "SanDisk Ultra USB 3.0 (Physical Lab Media)".to_string(),
-                serial: "4C530001230415116032".to_string(),
+                stable_id: "disk-sim-sandisk-16g".to_string(),
+                path: "/dev/sim_sdb".to_string(),
+                model: "[Simulated] SanDisk Ultra USB 3.0".to_string(),
+                serial: "SIM-SANDISK-16G-001".to_string(),
                 capacity_bytes: 16_000_000_000,
                 logical_block_size: 512,
                 physical_block_size: 512,
@@ -30,7 +30,7 @@ impl MockPlatformStorage {
                 boot_device: false,
                 system_disk: false,
                 read_only: false,
-                is_simulated: false,
+                is_simulated: true,
                 capabilities: vec![
                     DeviceCapability::HostBlockOverwrite,
                     DeviceCapability::SmartHealthQuery,
@@ -63,10 +63,10 @@ impl MockPlatformStorage {
                 ],
             },
             Device {
-                stable_id: "disk-vdisk-01".to_string(),
+                stable_id: "disk-sim-vdisk-01".to_string(),
                 path: "/dev/loop0".to_string(),
                 model: "[Simulated] VANISH Virtual Forensic Image".to_string(),
-                serial: "VN-LAB-8821".to_string(),
+                serial: "SIM-VN-LAB-8821".to_string(),
                 capacity_bytes: 512 * 1024 * 1024,
                 logical_block_size: 512,
                 physical_block_size: 4096,
@@ -84,10 +84,10 @@ impl MockPlatformStorage {
                 ],
             },
             Device {
-                stable_id: "disk-host-sys".to_string(),
-                path: "/dev/nvme0n1".to_string(),
-                model: "Host Primary System Disk (Write-Locked)".to_string(),
-                serial: "SYS-HOST-PROTECTED-01".to_string(),
+                stable_id: "disk-sim-host-sys".to_string(),
+                path: "/dev/sim_nvme0n1_sys".to_string(),
+                model: "[Simulated] Host Primary System Disk (Write-Locked)".to_string(),
+                serial: "SIM-SYS-HOST-01".to_string(),
                 capacity_bytes: 1_000_204_886_016,
                 logical_block_size: 512,
                 physical_block_size: 512,
@@ -98,7 +98,7 @@ impl MockPlatformStorage {
                 boot_device: true,
                 system_disk: true,
                 read_only: false,
-                is_simulated: false,
+                is_simulated: true,
                 capabilities: vec![
                     DeviceCapability::NvmeSanitizeBlockErase,
                     DeviceCapability::NvmeSanitizeCryptoErase,

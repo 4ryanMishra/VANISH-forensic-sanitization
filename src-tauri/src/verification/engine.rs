@@ -269,32 +269,40 @@ impl VerificationEngine {
                     }
 
                     if read_err || real_samples.is_empty() {
-                        limitations.push("Direct physical LBA read failed or permission denied; fallback to simulated sample profile.".to_string());
-                        (
-                            generate_simulated_samples(
-                                device.capacity_bytes,
-                                block_size,
-                                sample_count,
-                                entropy_mode,
-                            ),
-                            true,
-                        )
+                        evidence.push(format!("Failed to sample physical LBAs from '{}'", device.path));
+                        evidence.push("Direct physical LBA read error or permission denied.".to_string());
+                        limitations.push("Insufficient privilege or device I/O error reading physical LBAs.".to_string());
+
+                        return VerificationResult {
+                            level: VerificationLevel::L2HostVisible,
+                            status: VerificationStatus::NotAvailable,
+                            method: format!("LBA Sampling & Shannon Entropy Analysis (Pattern: {:?})", expected_pattern),
+                            confidence_pct: 0,
+                            detail: format!("Host-visible verification NOT AVAILABLE on '{}' due to LBA read error.", device.path),
+                            evidence,
+                            timestamp,
+                            limitations,
+                        };
                     } else {
                         limitations.push("Scanned host-accessible addressable LBAs; out-of-band wear-leveling flash cells cannot be reached.".to_string());
                         (real_samples, false)
                     }
                 }
-                Err(_) => {
-                    limitations.push("Device path unreadable; sampling executed in simulation mode.".to_string());
-                    (
-                        generate_simulated_samples(
-                            device.capacity_bytes,
-                            block_size,
-                            sample_count,
-                            entropy_mode,
-                        ),
-                        true,
-                    )
+                Err(e) => {
+                    evidence.push(format!("Failed to open device '{}' for LBA sampling: {}", device.path, e));
+                    evidence.push("OS error opening device handle for raw block read.".to_string());
+                    limitations.push(format!("Device path unreadable: {}", e));
+
+                    return VerificationResult {
+                        level: VerificationLevel::L2HostVisible,
+                        status: VerificationStatus::NotAvailable,
+                        method: format!("LBA Sampling & Shannon Entropy Analysis (Pattern: {:?})", expected_pattern),
+                        confidence_pct: 0,
+                        detail: format!("Host-visible verification NOT AVAILABLE on '{}': cannot open path ({}).", device.path, e),
+                        evidence,
+                        timestamp,
+                        limitations,
+                    };
                 }
             }
         };
@@ -447,14 +455,40 @@ impl VerificationEngine {
         let timestamp = Utc::now().to_rfc3339();
         let mut evidence = vec![];
         let mut limitations = vec![];
-        let sim_prefix = if simulation_mode { "[SIMULATION] " } else { "" };
 
-        // Read real verification sample buffer from device path or virtual buffer
-        let sample_buffer = if simulation_mode {
-            limitations.push("Evaluated against in-memory post-sanitization sample buffer; flash controller internal wear-leveling spare area out-of-band.".to_string());
-            vec![0u8; 64 * 1024]
+        if simulation_mode {
+            let sample_buffer = vec![0u8; 64 * 1024];
+            limitations.push("[SIMULATION] Evaluated against in-memory post-sanitization simulation buffer; flash controller internal wear-leveling spare area out-of-band.".to_string());
+
+            let recovered = crate::forensic::engine::ForensicEngine::scan_bytes(&sample_buffer, &device.stable_id);
+            let artifacts_found = recovered.len();
+            let signatures_checked = 12;
+
+            evidence.push(format!("[SIMULATION] Source: In-memory simulation buffer for '{}' ({} bytes)", device.stable_id, sample_buffer.len()));
+            evidence.push("[SIMULATION] Scan Performed: Deep signature carving and container header analysis".to_string());
+            evidence.push(format!("[SIMULATION] Signatures Checked: {} formats (JPEG, PNG, PDF, ZIP, ELF, SQLite, DOCX, etc.)", signatures_checked));
+            evidence.push(format!("[SIMULATION] Candidate headers found: {}", artifacts_found));
+            evidence.push(format!("[SIMULATION] Validated artifacts reconstructed: {}", artifacts_found));
+            evidence.push(format!("[SIMULATION] Target artifact match status: {}", if artifacts_found == 0 { "0 target artifacts recovered" } else { "Remnants detected" }));
+
+            let passed = artifacts_found == 0;
+
+            VerificationResult {
+                level: VerificationLevel::L4Forensic,
+                status: if passed { VerificationStatus::Pass } else { VerificationStatus::Fail },
+                method: "VANISH Deep Signature Carving & Bi-Fragment Reconstruction Scanner (Simulation)".to_string(),
+                confidence_pct: 85,
+                detail: format!(
+                    "Forensic validation PASSED [SIMULATION]: 0 target artifacts recovered by VANISH carving pipeline on '{}'.",
+                    device.stable_id
+                ),
+                evidence,
+                timestamp,
+                limitations,
+            }
         } else {
-            match std::fs::read(&device.path) {
+            // REAL MODE: Read actual physical device sectors
+            let sample_buffer = match std::fs::read(&device.path) {
                 Ok(data) => {
                     limitations.push("Scanned host-accessible addressable sectors; retired/spare flash cells cannot be addressed over host bus.".to_string());
                     let max_scan = 1024 * 1024; // Scan up to 1MB
@@ -465,41 +499,56 @@ impl VerificationEngine {
                     }
                 }
                 Err(e) => {
-                    limitations.push("Could not open physical device for direct carving read; falling back to sample buffer.".to_string());
-                    evidence.push(format!("Physical device read note: {}", e));
-                    vec![0u8; 64 * 1024]
+                    evidence.push(format!("Target path: '{}'", device.path));
+                    evidence.push(format!("Physical read failure: {}", e));
+                    evidence.push("OS error prevented reading raw sector stream from physical target.".to_string());
+                    evidence.push("Reason L4 could not be completed: Insufficient device read access or device detached.".to_string());
+                    limitations.push(format!("Physical sector read error: {}", e));
+
+                    return VerificationResult {
+                        level: VerificationLevel::L4Forensic,
+                        status: VerificationStatus::NotAvailable,
+                        method: "VANISH Deep Signature Carving (Physical Media Direct Scan)".to_string(),
+                        confidence_pct: 0,
+                        detail: format!(
+                            "Forensic validation NOT AVAILABLE: Cannot read raw sectors from physical target '{}' (OS Error: {}).",
+                            device.path, e
+                        ),
+                        evidence,
+                        timestamp,
+                        limitations,
+                    };
                 }
+            };
+
+            let recovered = crate::forensic::engine::ForensicEngine::scan_bytes(&sample_buffer, &device.stable_id);
+            let artifacts_found = recovered.len();
+            let signatures_checked = 12;
+
+            evidence.push(format!("Source: Physical addressable sectors for '{}' ({} bytes read)", device.stable_id, sample_buffer.len()));
+            evidence.push("Scan Performed: Deep signature carving and container header analysis on actual storage bytes".to_string());
+            evidence.push(format!("Signatures Checked: {} formats (JPEG, PNG, PDF, ZIP, ELF, SQLite, DOCX, etc.)", signatures_checked));
+            evidence.push(format!("Candidate headers found: {}", artifacts_found));
+            evidence.push(format!("Validated artifacts reconstructed: {}", artifacts_found));
+            evidence.push(format!("Target artifact match status: {}", if artifacts_found == 0 { "0 target artifacts recovered" } else { "Remnants detected" }));
+
+            let passed = artifacts_found == 0;
+
+            VerificationResult {
+                level: VerificationLevel::L4Forensic,
+                status: if passed { VerificationStatus::Pass } else { VerificationStatus::Fail },
+                method: "VANISH Deep Signature Carving & Bi-Fragment Reconstruction Scanner".to_string(),
+                confidence_pct: if passed { 95 } else { 0 },
+                detail: format!(
+                    "Forensic validation {}: {} target artifacts recovered by VANISH carving pipeline on '{}'.",
+                    if passed { "PASSED" } else { "FAILED" },
+                    artifacts_found,
+                    device.stable_id
+                ),
+                evidence,
+                timestamp,
+                limitations,
             }
-        };
-
-        // Run real ForensicEngine::scan_bytes()
-        let recovered = crate::forensic::engine::ForensicEngine::scan_bytes(&sample_buffer, &device.stable_id);
-        let artifacts_found = recovered.len();
-        let signatures_checked = 12; // 12 supported file and container signatures
-
-        evidence.push(format!("{sim_prefix}Source: Post-sanitization buffer for '{}' ({} bytes)", device.stable_id, sample_buffer.len()));
-        evidence.push(format!("{sim_prefix}Scan Performed: Deep signature carving and container header analysis"));
-        evidence.push(format!("{sim_prefix}Signatures Checked: {} formats (JPEG, PNG, PDF, ZIP, ELF, SQLite, DOCX, etc.)", signatures_checked));
-        evidence.push(format!("{sim_prefix}Candidate headers found: {}", artifacts_found));
-        evidence.push(format!("{sim_prefix}Validated artifacts reconstructed: {}", artifacts_found));
-        evidence.push(format!("{sim_prefix}Target artifact match status: {}", if artifacts_found == 0 { "0 target artifacts recovered" } else { "Remnants detected" }));
-
-        let passed = artifacts_found == 0;
-
-        VerificationResult {
-            level: VerificationLevel::L4Forensic,
-            status: if passed { VerificationStatus::Pass } else { VerificationStatus::Fail },
-            method: "VANISH Deep Signature Carving & Bi-Fragment Reconstruction Scanner".to_string(),
-            confidence_pct: if simulation_mode { 85 } else { 95 },
-            detail: format!(
-                "Forensic validation {}: 0 target artifacts recovered by VANISH carving pipeline on '{}'. {}",
-                if passed { "PASSED" } else { "FAILED" },
-                device.stable_id,
-                if simulation_mode { "[simulation_mode=true]" } else { "" }
-            ),
-            evidence,
-            timestamp,
-            limitations,
         }
     }
 }

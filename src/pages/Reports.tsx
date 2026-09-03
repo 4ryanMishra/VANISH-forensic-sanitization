@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Download, ShieldCheck, Printer, FileText, CheckCircle2, QrCode } from 'lucide-react';
 import { HashingIntegrity } from '../components/HashingIntegrity';
-import { fetchDevices, fetchAuditLog } from '../services/api';
-import { Device, AuditEvent } from '../types';
+import { fetchDevices, fetchAuditLog, runVerification } from '../services/api';
+import { Device, AuditEvent, VerificationReport } from '../types';
 
 export const Reports: React.FC = () => {
   const [reportType, setReportType] = useState<'sanitization' | 'forensic'>('sanitization');
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
+  const [loadingVerification, setLoadingVerification] = useState(false);
 
   useEffect(() => {
     fetchDevices().then((devs) => {
@@ -19,17 +21,28 @@ export const Reports: React.FC = () => {
     fetchAuditLog().then(setAuditEvents);
   }, []);
 
-  const handleExportJson = () => {
-    const tipHash = auditEvents.length > 0 ? auditEvents[auditEvents.length - 1].current_event_hash : '0000000000000000000000000000000000000000000000000000000000000000';
+  useEffect(() => {
+    if (selectedDevice) {
+      setLoadingVerification(true);
+      const methodStr = selectedDevice.interface === 'Nvme' ? 'NvmeSanitizeBlockErase' : 'HostBlockOverwrite';
+      runVerification(selectedDevice, methodStr, selectedDevice.is_simulated)
+        .then((v) => setVerificationReport(v))
+        .catch(() => setVerificationReport(null))
+        .finally(() => setLoadingVerification(false));
+    } else {
+      setVerificationReport(null);
+    }
+  }, [selectedDevice]);
 
+  const tipHash = auditEvents.length > 0 ? auditEvents[auditEvents.length - 1].current_event_hash : 'GENESIS-CHAIN-LOCKED';
+
+  const handleExportJson = () => {
     const data = {
       report_type: reportType,
       generated_at: new Date().toISOString(),
       target_device: selectedDevice,
-      compliance_standards: ['NIST SP 800-88 Rev. 2', 'IEEE 2883-2022', 'DoD 5220.22-M'],
-      verification_status: selectedDevice?.media_type === 'SsdNvme'
-        ? 'L1, L2, L3, L4 Multi-Level Verified (0 Target Artifacts Detected)'
-        : 'L1, L2, L4 Verified (L3 Unsupported on USB/SATA, 0 Target Artifacts Detected)',
+      compliance_standards: ['NIST SP 800-88 Rev. 2', 'ISO/IEC 27040:2024'],
+      verification_report: verificationReport || 'Verification not yet executed',
       audit_chain_tip_hash: tipHash,
       audit_chain_events_count: auditEvents.length,
       audit_chain_events: auditEvents,
@@ -55,9 +68,7 @@ export const Reports: React.FC = () => {
 
   const formattedCapacity = selectedDevice
     ? `${(selectedDevice.capacity_bytes / 1e9).toFixed(2)} GB (${selectedDevice.capacity_bytes.toLocaleString()} Bytes)`
-    : '16.00 GB (16,000,000,000 Bytes)';
-
-  const tipHash = auditEvents.length > 0 ? auditEvents[auditEvents.length - 1].current_event_hash : 'GENESIS-CHAIN-LOCKED';
+    : 'No Target Selected';
 
   return (
     <div className="p-8 space-y-6">
@@ -78,7 +89,7 @@ export const Reports: React.FC = () => {
             >
               {devices.map((d) => (
                 <option key={d.stable_id} value={d.stable_id}>
-                  {d.model}
+                  {d.model} {d.is_simulated ? '[SIMULATION]' : ''}
                 </option>
               ))}
             </select>
@@ -153,11 +164,11 @@ export const Reports: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-xs font-mono">
           <div className="space-y-1">
             <span className="text-gray-500 uppercase">Target Device</span>
-            <div className="text-gray-200 font-bold">{selectedDevice?.model || 'SanDisk Ultra USB 3.0'}</div>
+            <div className="text-gray-200 font-bold">{selectedDevice?.model || 'No Target Selected'}</div>
           </div>
           <div className="space-y-1">
             <span className="text-gray-500 uppercase">Serial Number</span>
-            <div className="text-gray-200 font-bold">{selectedDevice?.serial || '4C530001230415116032'}</div>
+            <div className="text-gray-200 font-bold">{selectedDevice?.serial || 'N/A'}</div>
           </div>
           <div className="space-y-1">
             <span className="text-gray-500 uppercase">Media Capacity</span>
@@ -166,15 +177,7 @@ export const Reports: React.FC = () => {
           <div className="space-y-1">
             <span className="text-gray-500 uppercase">Standard Applied</span>
             <div className="text-blue-400 font-bold">
-              {reportType === 'sanitization' ? 'NIST SP 800-88 Rev. 2 (Purge / Clear)' : 'DFIR NIST SP 800-86 Forensic Carving'}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <span className="text-gray-500 uppercase">Verification Levels</span>
-            <div className="text-emerald-400 font-bold">
-              {selectedDevice?.media_type === 'SsdNvme'
-                ? 'L1, L2, L3, L4 (Full NVMe Matrix)'
-                : 'L1, L2, L4 (L3 Unsupported on USB/SATA)'}
+              {reportType === 'sanitization' ? 'NIST SP 800-88 Rev. 2 (Clear)' : 'DFIR NIST SP 800-86 Forensic Carving'}
             </div>
           </div>
           <div className="space-y-1">
@@ -189,6 +192,46 @@ export const Reports: React.FC = () => {
           </div>
         </div>
 
+        {/* Truthful Verification Levels Rendering */}
+        <div className="space-y-2">
+          <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider">
+            Verification Results ({verificationReport ? `${verificationReport.confidence_pct}% Confidence` : 'Pending'})
+          </span>
+          {loadingVerification ? (
+            <div className="text-xs text-gray-500 font-mono py-2">Loading verification telemetry...</div>
+          ) : verificationReport && verificationReport.results && verificationReport.results.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {verificationReport.results.map((res) => (
+                <div key={res.level} className="p-3 rounded-lg bg-surface-highlight border border-gray-800 space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-gray-200">{res.level}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        res.status === 'PASS' || res.status === 'PASSED'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : res.status === 'UNSUPPORTED'
+                          ? 'bg-gray-800 text-gray-400 border border-gray-700'
+                          : res.status === 'NOT_AVAILABLE'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : res.status === 'INCONCLUSIVE'
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}
+                    >
+                      {res.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-gray-400 text-[11px] leading-tight">{res.detail}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-surface-highlight border border-gray-800 text-xs text-gray-400 font-mono">
+              Verification not yet executed
+            </div>
+          )}
+        </div>
+
         {/* Certified Declaration Statement */}
         <div className="p-5 rounded-xl bg-surface-highlight border border-gray-800 text-xs space-y-2">
           <div className="flex items-center space-x-2 text-emerald-400 font-bold uppercase tracking-wider text-[11px]">
@@ -197,9 +240,11 @@ export const Reports: React.FC = () => {
           </div>
           <p className="text-gray-300 italic leading-relaxed">
             {reportType === 'sanitization'
-              ? (selectedDevice?.media_type === 'SsdNvme'
-                  ? '"It is hereby certified that the target storage media underwent hardware-level NVMe sanitize purge and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."'
-                  : '"It is hereby certified that the target storage media underwent controlled host-level raw block sanitization and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."')
+              ? (selectedDevice?.media_type === 'SsdNvme' && !selectedDevice?.is_simulated
+                  ? '"It is hereby certified that the target storage media underwent NVMe sanitize purge and post-wipe deep carving validation. Verified according to the methods actually executed by VANISH."'
+                  : selectedDevice?.interface === 'Usb'
+                  ? '"It is hereby certified that the target storage media underwent controlled host-level raw block sanitization and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."'
+                  : '"Verified according to the methods actually executed by VANISH."')
               : '"It is hereby certified that digital evidence was acquired strictly in read-only write-blocked mode. File signatures, non-contiguous fragment hypotheses, and SHA-256 provenance chains were verified and stored with complete evidential integrity."'}
           </p>
         </div>

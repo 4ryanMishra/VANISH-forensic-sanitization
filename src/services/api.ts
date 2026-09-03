@@ -13,10 +13,10 @@ export interface ExecutionSummary {
 // Storage device abstraction layer aligned with docs/08_PHYSICAL_LAB.md
 const MOCK_DEVICES: Device[] = [
   {
-    stable_id: 'disk-sandisk-16g',
-    path: '/dev/sdb',
-    model: 'SanDisk Ultra USB 3.0 (Physical Lab Media)',
-    serial: '4C530001230415116032',
+    stable_id: 'disk-sim-sandisk-16g',
+    path: '/dev/sim_sdb',
+    model: '[Simulated] SanDisk Ultra USB 3.0',
+    serial: 'SIM-SANDISK-16G-001',
     capacity_bytes: 16000000000,
     logical_block_size: 512,
     physical_block_size: 512,
@@ -27,7 +27,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: false,
     system_disk: false,
     read_only: false,
-    is_simulated: false,
+    is_simulated: true,
     capabilities: ['HostBlockOverwrite'],
   },
   {
@@ -49,10 +49,10 @@ const MOCK_DEVICES: Device[] = [
     capabilities: ['NvmeSanitizeBlockErase', 'NvmeSanitizeCryptoErase', 'NvmeSanitizeOverwrite', 'TrimSupported'],
   },
   {
-    stable_id: 'disk-vdisk-01',
+    stable_id: 'disk-sim-vdisk-01',
     path: '/dev/loop0',
     model: '[Simulated] VANISH Virtual Forensic Image',
-    serial: 'VN-LAB-8821',
+    serial: 'SIM-VN-LAB-8821',
     capacity_bytes: 536870912, // 512MB
     logical_block_size: 512,
     physical_block_size: 4096,
@@ -67,10 +67,10 @@ const MOCK_DEVICES: Device[] = [
     capabilities: ['HostBlockOverwrite', 'TrimSupported'],
   },
   {
-    stable_id: 'disk-host-sys',
-    path: '/dev/nvme0n1',
-    model: 'Host Primary System Disk (Write-Locked)',
-    serial: 'SYS-HOST-PROTECTED-01',
+    stable_id: 'disk-sim-host-sys',
+    path: '/dev/sim_nvme0n1_sys',
+    model: '[Simulated] Host Primary System Disk (Write-Locked)',
+    serial: 'SIM-SYS-HOST-01',
     capacity_bytes: 1000204886016,
     logical_block_size: 512,
     physical_block_size: 512,
@@ -81,7 +81,7 @@ const MOCK_DEVICES: Device[] = [
     boot_device: true,
     system_disk: true,
     read_only: false,
-    is_simulated: false,
+    is_simulated: true,
     capabilities: ['NvmeSanitizeBlockErase', 'NvmeSanitizeCryptoErase', 'TrimSupported'],
   },
 ];

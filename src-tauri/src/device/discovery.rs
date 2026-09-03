@@ -39,11 +39,9 @@ impl DeviceDiscoveryService {
             }
         }
 
-        // If no physical/native devices were discovered (or running in lab simulation environment),
-        // provide the laboratory simulation fixtures.
-        if raw_devices.is_empty() {
-            raw_devices = self.mock_platform.enumerate_mock_devices()?;
-        }
+        // In REAL mode: return only genuine platform-discovered devices.
+        // If none exist, return an empty device list. NEVER inject mock devices.
+        // Mock fixtures are only returned via list_simulated_devices().
 
         let mut processed_devices = Vec::new();
 

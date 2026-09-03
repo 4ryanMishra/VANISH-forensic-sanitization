@@ -4,18 +4,41 @@ mod tests {
     use vanish_lib::device::{CapabilityDiscoveryEngine, DeviceDiscoveryService, DeviceIdentityEngine};
 
     #[test]
-    fn test_device_discovery_enumeration() {
+    fn test_real_mode_never_returns_mock_devices() {
         let discovery = DeviceDiscoveryService::new();
-        let devices = discovery.list_devices().expect("enumeration should succeed");
-        assert!(!devices.is_empty());
+        let devices = discovery.list_devices().expect("real enumeration should succeed");
+        
+        // Real mode MUST NEVER contain mock fixture IDs or simulated devices
+        for dev in &devices {
+            assert!(!dev.is_simulated, "Real mode must only contain physical devices");
+            assert!(!dev.stable_id.starts_with("disk-sim-"), "Real mode must not contain simulated fixture IDs");
+        }
+    }
 
-        let sandisk = devices.iter().find(|d| d.serial == "4C530001230415116032");
-        assert!(sandisk.is_some(), "SanDisk USB lab media fixture must be discovered");
-        let sandisk_dev = sandisk.unwrap();
+    #[test]
+    fn test_simulation_mode_returns_simulated_fixtures() {
+        let discovery = DeviceDiscoveryService::new();
+        let sim_devices = discovery.list_simulated_devices().expect("simulated enumeration should succeed");
+        assert!(!sim_devices.is_empty(), "Simulation mode must return laboratory test fixtures");
+
+        let sim_sandisk = sim_devices.iter().find(|d| d.serial == "SIM-SANDISK-16G-001");
+        assert!(sim_sandisk.is_some(), "Simulation mode must provide [Simulated] SanDisk USB fixture");
+        let sandisk_dev = sim_sandisk.unwrap();
+        assert!(sandisk_dev.is_simulated, "Simulated SanDisk must have is_simulated=true");
         assert_eq!(sandisk_dev.media_type, MediaType::UsbFlash);
         assert!(!sandisk_dev.system_disk);
         assert!(sandisk_dev.capabilities.contains(&DeviceCapability::HostBlockOverwrite));
         assert!(!sandisk_dev.capabilities.contains(&DeviceCapability::NvmeSanitizeBlockErase));
+    }
+
+    #[test]
+    fn test_no_simulated_fixture_marked_physical() {
+        let discovery = DeviceDiscoveryService::new();
+        let sim_devices = discovery.list_simulated_devices().unwrap();
+        for dev in sim_devices {
+            assert!(dev.is_simulated, "No simulated fixture may be marked physical (is_simulated=false)");
+            assert!(dev.model.starts_with("[Simulated]"), "All simulated fixtures must be explicitly prefixed with [Simulated]");
+        }
     }
 
     #[test]
@@ -29,7 +52,7 @@ mod tests {
     #[test]
     fn test_simulated_nvme_capabilities() {
         let discovery = DeviceDiscoveryService::new();
-        let devices = discovery.list_devices().unwrap();
+        let devices = discovery.list_simulated_devices().unwrap();
         let sim_nvme = devices.iter().find(|d| d.serial == "SIM-NVME-PURGE-9912").unwrap();
 
         assert_eq!(sim_nvme.media_type, MediaType::SsdNvme);
