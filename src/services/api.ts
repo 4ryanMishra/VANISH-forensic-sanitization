@@ -369,3 +369,84 @@ export async function fetchHashStatus(): Promise<HashStatusReport> {
     ],
   };
 }
+
+/**
+ * Executes a forensic carving and recovery scan on the target image or disposable media.
+ * Connects to the native Tauri `scan_and_recover_artifacts` command.
+ */
+export async function scanAndRecoverArtifacts(
+  sourcePath: string = 'disk-vdisk-01',
+  simulationMode: boolean = true
+): Promise<import('../types').RecoveredArtifact[]> {
+  try {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      return await invoke<import('../types').RecoveredArtifact[]>('scan_and_recover_artifacts', {
+        sourcePath,
+        simulationMode,
+      });
+    }
+  } catch (err) {
+    console.warn('Tauri API unavailable, returning simulated carved artifacts:', err);
+  }
+
+  return [
+    {
+      artifact_id: 'art-001-jpg',
+      source_id: 'disk-vdisk-01',
+      source_offsets: [[4096, 61440]],
+      format: 'Jpeg',
+      original_path: 'recovered/art-001_carved.jpg',
+      extracted_path: 'recovered/art-001_carved.jpg',
+      size_bytes: 57344,
+      sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+      validation_status: 'Valid',
+      confidence_score: 0.98,
+      provenance: {
+        source_id: 'disk-vdisk-01',
+        detection_method: 'ContiguousSignature',
+        sector_ranges: [[8, 120]],
+        entropy_score: 7.84,
+        header_magic: 'FF D8 FF E0',
+      },
+    },
+    {
+      artifact_id: 'art-002-pdf',
+      source_id: 'disk-vdisk-01',
+      source_offsets: [[32768, 65536]],
+      format: 'Pdf',
+      original_path: 'recovered/art-002_reconstructed.pdf',
+      extracted_path: 'recovered/art-002_reconstructed.pdf',
+      size_bytes: 32768,
+      sha256: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+      validation_status: 'Valid',
+      confidence_score: 0.94,
+      provenance: {
+        source_id: 'disk-vdisk-01',
+        detection_method: 'FragmentedReconstruction',
+        sector_ranges: [[64, 96], [128, 160]],
+        entropy_score: 7.21,
+        header_magic: '25 50 44 46',
+      },
+    },
+    {
+      artifact_id: 'art-003-png',
+      source_id: 'disk-vdisk-01',
+      source_offsets: [[65536, 98304]],
+      format: 'Png',
+      original_path: 'recovered/art-003_carved.png',
+      extracted_path: 'recovered/art-003_carved.png',
+      size_bytes: 32768,
+      sha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+      validation_status: 'Valid',
+      confidence_score: 0.99,
+      provenance: {
+        source_id: 'disk-vdisk-01',
+        detection_method: 'ContiguousSignature',
+        sector_ranges: [[128, 192]],
+        entropy_score: 7.91,
+        header_magic: '89 50 4E 47',
+      },
+    },
+  ];
+}
