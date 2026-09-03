@@ -253,6 +253,24 @@ export interface RecoveredArtifact {
   provenance: ArtifactProvenance;
 }
 
+export interface RecoveryJob {
+  job_id: string;
+  source_path: string;
+  scan_mode: string;
+  simulation_mode: boolean;
+  created_at_utc: string;
+}
+
+export interface RecoveryResult {
+  job_id: string;
+  source_id: string;
+  total_scanned_bytes: number;
+  artifacts: RecoveredArtifact[];
+  simulation_mode: boolean;
+  execution_time_ms: number;
+  summary_notes: string;
+}
+
 // ── Job tracking ──────────────────────────────────────────────────────────────
 
 export type JobState =

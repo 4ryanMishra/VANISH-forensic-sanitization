@@ -50,3 +50,23 @@ pub struct RecoveredArtifact {
     pub confidence_score: f32, // 0.0 to 1.0
     pub provenance: ArtifactProvenance,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryJob {
+    pub job_id: String,
+    pub source_path: String,
+    pub scan_mode: String,
+    pub simulation_mode: bool,
+    pub created_at_utc: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryResult {
+    pub job_id: String,
+    pub source_id: String,
+    pub total_scanned_bytes: u64,
+    pub artifacts: Vec<RecoveredArtifact>,
+    pub simulation_mode: bool,
+    pub execution_time_ms: u64,
+    pub summary_notes: String,
+}
