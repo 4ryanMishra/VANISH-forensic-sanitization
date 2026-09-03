@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Device, SanitizationStandard, SanitizationPlan } from '../types';
-import { fetchDevices, fetchRecommendedPlan } from '../services/api';
+import { fetchDevices, fetchRecommendedPlan, executeSanitizationPlan, ExecutionSummary } from '../services/api';
 import { Trash2, AlertOctagon, CheckCircle2 } from 'lucide-react';
 
 export const Sanitization: React.FC = () => {
@@ -11,6 +11,7 @@ export const Sanitization: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const [completed, setCompleted] = useState<boolean>(false);
+  const [summary, setSummary] = useState<ExecutionSummary | null>(null);
 
   useEffect(() => {
     fetchDevices().then((devs) => {
@@ -26,23 +27,34 @@ export const Sanitization: React.FC = () => {
     }
   }, [selectedDevice, standard]);
 
-  const handleStartSanitization = () => {
-    if (!selectedDevice || selectedDevice.system_disk) return;
+  const handleStartSanitization = async () => {
+    if (!selectedDevice || selectedDevice.system_disk || !plan) return;
     setIsExecuting(true);
     setProgress(0);
     setCompleted(false);
+    setSummary(null);
 
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsExecuting(false);
-          setCompleted(true);
-          return 100;
+        if (prev >= 90) {
+          return 90;
         }
-        return prev + 10;
+        return prev + 15;
       });
-    }, 400);
+    }, 300);
+
+    try {
+      const result = await executeSanitizationPlan(plan, selectedDevice);
+      clearInterval(interval);
+      setProgress(100);
+      setIsExecuting(false);
+      setCompleted(true);
+      setSummary(result);
+    } catch (err) {
+      clearInterval(interval);
+      setIsExecuting(false);
+      console.error('Sanitization failed:', err);
+    }
   };
 
   return (
@@ -98,6 +110,7 @@ export const Sanitization: React.FC = () => {
               <option value="Dod522022M3Pass">DoD 5220.22-M (3-Pass Multi-Pattern)</option>
               <option value="Ieee2883Purge">IEEE 2883-2022 — Purge</option>
               <option value="SinglePassZero">Single-Pass Zero Stream (0x00)</option>
+              <option value="SinglePassRandom">Single-Pass Pseudo-Random Stream</option>
             </select>
           </div>
         </div>
@@ -122,7 +135,7 @@ export const Sanitization: React.FC = () => {
 
               {plan.warnings.length > 0 && (
                 <div className="p-4 rounded-lg bg-amber-950/30 border border-amber-500/30 text-xs text-amber-200/90 space-y-1">
-                  <div className="font-semibold text-amber-300">Technical Warnings:</div>
+                  <div className="font-semibold text-amber-300">Technical Warnings & Scope:</div>
                   {plan.warnings.map((w, i) => (
                     <div key={i}>• {w}</div>
                   ))}
@@ -154,11 +167,16 @@ export const Sanitization: React.FC = () => {
                 </div>
               )}
 
-              {completed && (
-                <div className="p-4 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center space-x-3">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-                  <div>
-                    <strong>Sanitization Operation Complete.</strong> Proceed to L1–L4 Multi-Level Verification.
+              {completed && summary && (
+                <div className="p-4 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 space-y-2">
+                  <div className="flex items-center space-x-2 font-bold">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <span>Sanitization Operation Complete ({summary.method_executed})</span>
+                  </div>
+                  <div className="font-mono text-gray-300 text-[11px] pl-7 space-y-1">
+                    {summary.execution_log.map((entry, idx) => (
+                      <div key={idx}>✓ {entry}</div>
+                    ))}
                   </div>
                 </div>
               )}
