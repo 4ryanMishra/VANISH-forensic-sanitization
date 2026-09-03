@@ -5,9 +5,10 @@ use uuid::Uuid;
 
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+#[derive(Debug, Clone)]
 pub struct AuditChain {
-    events: Vec<AuditEvent>,
-    last_hash: String,
+    pub events: Vec<AuditEvent>,
+    pub last_hash: String,
 }
 
 impl AuditChain {
@@ -32,24 +33,19 @@ impl AuditChain {
         let timestamp = Utc::now();
         let event_id = format!("evt-{}", Uuid::new_v4());
 
-        // Canonical string for hashing
-        let canonical_str = format!(
-            "{}:{}:{}:{:?}:{}:{}:{}:{}:{}:{}",
+        let current_event_hash = Self::compute_canonical_event_hash(
             sequence_number,
-            event_id,
-            timestamp.to_rfc3339(),
-            actor,
-            operation,
-            target_id,
-            parameters_json,
-            result_status,
-            self.last_hash,
-            error_message.as_deref().unwrap_or("")
+            &event_id,
+            &timestamp.to_rfc3339(),
+            &actor,
+            &operation,
+            &target_id,
+            &parameters_json,
+            &result_status,
+            verification_summary.as_deref(),
+            error_message.as_deref(),
+            &self.last_hash,
         );
-
-        let mut hasher = Sha256::new();
-        hasher.update(canonical_str.as_bytes());
-        let current_event_hash = hex::encode(hasher.finalize());
 
         let event = AuditEvent {
             event_id,
@@ -71,30 +67,66 @@ impl AuditChain {
         event
     }
 
+    /// Computes the canonical SHA-256 hash across all serialized event fields
+    pub fn compute_canonical_event_hash(
+        sequence_number: u64,
+        event_id: &str,
+        timestamp_iso: &str,
+        actor: &AuditActor,
+        operation: &str,
+        target_id: &str,
+        parameters_json: &str,
+        result_status: &str,
+        verification_summary: Option<&str>,
+        error_message: Option<&str>,
+        previous_event_hash: &str,
+    ) -> String {
+        let canonical_str = format!(
+            "{}:{}:{}:{:?}:{}:{}:{}:{}:{}:{}:{}",
+            sequence_number,
+            event_id,
+            timestamp_iso,
+            actor,
+            operation,
+            target_id,
+            parameters_json,
+            result_status,
+            verification_summary.unwrap_or(""),
+            error_message.unwrap_or(""),
+            previous_event_hash
+        );
+
+        let mut hasher = Sha256::new();
+        hasher.update(canonical_str.as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
+    /// Verifies the entire chained sequence from genesis
     pub fn verify_integrity(&self) -> bool {
+        Self::verify_events(&self.events)
+    }
+
+    /// Verifies any slice of AuditEvents against hash link and content validity
+    pub fn verify_events(events: &[AuditEvent]) -> bool {
         let mut prev_hash = GENESIS_HASH.to_string();
-        for event in &self.events {
+        for event in events {
             if event.previous_event_hash != prev_hash {
                 return false;
             }
 
-            let canonical_str = format!(
-                "{}:{}:{}:{:?}:{}:{}:{}:{}:{}:{}",
+            let computed_hash = Self::compute_canonical_event_hash(
                 event.sequence_number,
-                event.event_id,
-                event.timestamp.to_rfc3339(),
-                event.actor,
-                event.operation,
-                event.target_id,
-                event.parameters_json,
-                event.result_status,
-                event.previous_event_hash,
-                event.error_message.as_deref().unwrap_or("")
+                &event.event_id,
+                &event.timestamp.to_rfc3339(),
+                &event.actor,
+                &event.operation,
+                &event.target_id,
+                &event.parameters_json,
+                &event.result_status,
+                event.verification_summary.as_deref(),
+                event.error_message.as_deref(),
+                &event.previous_event_hash,
             );
-
-            let mut hasher = Sha256::new();
-            hasher.update(canonical_str.as_bytes());
-            let computed_hash = hex::encode(hasher.finalize());
 
             if event.current_event_hash != computed_hash {
                 return false;

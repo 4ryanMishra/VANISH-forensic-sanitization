@@ -50,20 +50,20 @@ impl PatternScanner {
                                 container_parsed = true;
                             }
                         }
-                        ContainerType::_ipArchive => {
-                            if let Some(c_len) = ZipContainerParser::calculate_lengthremaining) {
+                        ContainerType::ZipArchive => {
+                            if let Some(c_len) = ZipContainerParser::calculate_length(remaining) {
                                 detected_length = Some(c_len);
                                 container_parsed = true;
                             }
                         }
                         ContainerType::SqliteDatabase => {
-                            if let Some(c_len) = SqliteContainerParser::calculate_lengthremaining) {
+                            if let Some(c_len) = SqliteContainerParser::calculate_length(remaining) {
                                 detected_length = Some(c_len);
                                 container_parsed = true;
                             }
                         }
                         ContainerType::JpegStream => {
-                            if let Some(c_len) = JpegContainerParser::calculate_lengthremaining) {
+                            if let Some(c_len) = JpegContainerParser::calculate_length(remaining) {
                                 detected_length = Some(c_len);
                                 container_parsed = true;
                             }

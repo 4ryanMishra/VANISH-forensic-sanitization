@@ -203,47 +203,68 @@ export async function runVerification(
 
   // Simulation fallback for browser dev mode
   const isNvme = device.media_type === 'SsdNvme';
+  const now = new Date().toISOString();
   return {
     target_id: device.stable_id,
     levels_executed: ['L1Logical', 'L2HostVisible', 'L3DeviceReported', 'L4Forensic'],
     results: [
       {
         level: 'L1Logical',
-        status: 'PASSED',
+        status: 'PASS',
+        method: 'Logical MBR/GPT Partition Inspection (Simulation)',
         confidence_pct: 85,
-        detail: `[SIM] Logical verification PASSED. No filesystem metadata on '${device.stable_id}'.`,
-        evidence: ['[SIM] blkid: no filesystem type detected', '[SIM] MBR sector: all 0x00'],
+        detail: `[SIMULATION] Logical verification PASSED. No active filesystem metadata on '${device.stable_id}'.`,
+        evidence: ['[SIMULATION] blkid: no filesystem type detected', '[SIMULATION] MBR sector: all 0x00'],
+        timestamp: now,
+        limitations: ['[SIMULATION] Verified against virtual storage state; physical sector 0 not read.'],
       },
       {
         level: 'L2HostVisible',
-        status: 'PASSED',
+        status: 'PASS',
+        method: 'Host LBA Sampling & Shannon Entropy Analysis (Simulation)',
         confidence_pct: 95,
-        detail: `[SIM] Block sampling PASSED — 64 samples, mean entropy 0.0001 bits/byte.`,
-        evidence: ['[SIM] Block samples taken: 64', '[SIM] Entropy analysis: mean=0.0001, min=0.0, max=0.0002', '[SIM] Pattern check: 64/64 blocks passed'],
+        detail: `[SIMULATION] Block sampling PASSED — 64 samples, mean entropy 0.0001 bits/byte.`,
+        evidence: ['[SIMULATION] Block samples taken: 64', '[SIMULATION] Entropy analysis: mean=0.0001, min=0.0, max=0.0002', '[SIMULATION] Pattern check: 64/64 blocks passed'],
+        timestamp: now,
+        limitations: ['[SIMULATION] Entropy and pattern scan performed over simulated sample blocks.'],
       },
       {
         level: 'L3DeviceReported',
-        status: isNvme ? 'PASSED' : 'UNSUPPORTED',
+        status: isNvme ? 'PASS' : 'UNSUPPORTED',
+        method: 'NVMe Sanitize Status Log Page 0x81 (Simulation)',
         confidence_pct: isNvme ? 80 : 0,
         detail: isNvme
-          ? '[SIM] NVMe Sanitize Status Log PASSED. SSTAT=0x01, SPROG=0xFFFF, GlobalDataErased=true.'
-          : `L3 Device-Reported verification is NOT SUPPORTED for media type '${device.media_type}'.`,
+          ? '[SIMULATION] NVMe Sanitize Status Log PASSED. SSTAT=0x01, SPROG=0xFFFF, GlobalDataErased=true.'
+          : `L3 Device-Reported verification is UNSUPPORTED for media type '${device.media_type}'.`,
         evidence: isNvme
-          ? ['[SIM] NVMe Log Page 0x81 read', '[SIM] SSTAT[2:0]=0x01 ✓', '[SIM] SPROG=0xFFFF ✓']
+          ? ['[SIMULATION] NVMe Log Page 0x81 read', '[SIMULATION] SSTAT[2:0]=0x01 ✓', '[SIMULATION] SPROG=0xFFFF ✓']
           : ['L3 not applicable for USB flash / virtual disks — expected per spec'],
+        timestamp: now,
+        limitations: isNvme
+          ? ['[SIMULATION] Telemetry read from SimulatedNvmeController state machine.']
+          : ['USB mass storage and SATA bridges do not implement NVMe Sanitize Log Page 0x81.'],
       },
       {
         level: 'L4Forensic',
-        status: 'PASSED',
-        confidence_pct: 75,
-        detail: `[SIM] Forensic validation PASSED — 0 files recoverable on '${device.stable_id}'.`,
-        evidence: ['[SIM] File-carving scan: 0 files recovered', '[SIM] Agent B handshake: CONFIRMED UNRECOVERABLE'],
+        status: 'PASS',
+        method: 'VANISH Deep Signature Carving & Bi-Fragment Reconstruction Scanner',
+        confidence_pct: 85,
+        detail: `[SIMULATION] Forensic validation PASSED: 0 target artifacts recovered by VANISH carving pipeline on '${device.stable_id}'.`,
+        evidence: [
+          '[SIMULATION] Source: Post-sanitization buffer for ' + device.stable_id,
+          '[SIMULATION] Signatures Checked: 12 formats (JPEG, PNG, PDF, ZIP, ELF, SQLite, etc.)',
+          '[SIMULATION] Candidate headers found: 0',
+          '[SIMULATION] Validated artifacts reconstructed: 0',
+        ],
+        timestamp: now,
+        limitations: ['[SIMULATION] Evaluated against in-memory post-sanitization sample buffer.'],
       },
     ],
     overall_passed: true,
     confidence_pct: isNvme ? 88 : 82,
-    timestamp_utc: new Date().toISOString(),
+    timestamp_utc: now,
     unsupported_levels: isNvme ? [] : ['L3DeviceReported'],
+    is_simulation: true,
   };
 }
 
@@ -341,32 +362,32 @@ export async function fetchHashStatus(): Promise<HashStatusReport> {
   }
 
   // Simulation fallback — clearly labelled, never presented as real forensic results.
-  // Digests are zero-filled to make it unambiguous this is not a real hash value.
+  // Never show zero-filled hashes as though they are real evidence.
   const now = new Date().toISOString();
   return {
     backend_available: false,
     results: [
       {
         algorithm: 'SHA-256',
-        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        digest: 'SIMULATED / UNAVAILABLE (Backend Offline)',
         purpose: 'canonical_evidence',
-        source_label: 'Audit chain tip hash (simulation — no real data hashed)',
+        source_label: 'Audit chain tip hash (Simulation fallback)',
         computed_at: now,
         simulation_mode: true,
       },
       {
         algorithm: 'SHA-256',
-        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        digest: 'SIMULATED / UNAVAILABLE (Backend Offline)',
         purpose: 'canonical_evidence',
-        source_label: 'Last recovered artifact identity hash (simulation)',
+        source_label: 'Last recovered artifact identity hash (Simulation fallback)',
         computed_at: now,
         simulation_mode: true,
       },
       {
         algorithm: 'BLAKE3',
-        digest: '0000000000000000000000000000000000000000000000000000000000000000',
+        digest: 'SIMULATED / UNAVAILABLE (Backend Offline)',
         purpose: 'internal_processing',
-        source_label: 'Storage scan chunk hash (simulation — large block dedup)',
+        source_label: 'Storage scan chunk hash (Simulation fallback)',
         computed_at: now,
         simulation_mode: true,
       },
@@ -394,62 +415,118 @@ export async function scanAndRecoverArtifacts(
     console.warn('Tauri API unavailable, returning simulated carved artifacts:', err);
   }
 
+  const now = new Date().toISOString();
   return [
     {
       artifact_id: 'art-001-jpg',
       source_id: 'disk-vdisk-01',
+      source_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       source_offsets: [[4096, 61440]],
       format: 'Jpeg',
       original_path: 'recovered/art-001_carved.jpg',
       extracted_path: 'recovered/art-001_carved.jpg',
       size_bytes: 57344,
       sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+      optional_blake3: 'af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262',
       validation_status: 'Valid',
+      validation_method: 'JPEG Complete Frame & Marker Stream Parser',
       confidence_score: 0.98,
+      timestamp_utc: now,
       provenance: {
         source_id: 'disk-vdisk-01',
+        source_type_desc: 'SimulationBuffer',
         detection_method: 'ContiguousSignature',
+        validation_method: 'JPEG Complete Frame & Marker Stream Parser',
         sector_ranges: [[8, 120]],
+        fragments: [
+          {
+            sequence_index: 0,
+            start_offset: 4096,
+            length_bytes: 57344,
+            sector_start: 8,
+            sector_end: 120,
+          },
+        ],
         entropy_score: 7.84,
         header_magic: 'FF D8 FF E0',
+        recovery_timestamp_utc: now,
       },
     },
     {
       artifact_id: 'art-002-pdf',
       source_id: 'disk-vdisk-01',
+      source_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       source_offsets: [[32768, 65536]],
       format: 'Pdf',
       original_path: 'recovered/art-002_reconstructed.pdf',
       extracted_path: 'recovered/art-002_reconstructed.pdf',
       size_bytes: 32768,
       sha256: '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8',
+      optional_blake3: 'b14457e5b61c569fe01c8767e7c9927be636d1b783f982462e843c08bf60e1d4',
       validation_status: 'Valid',
+      validation_method: 'Bi-Fragment Stitched & PDF Object Catalog & Trailer Parser',
       confidence_score: 0.94,
+      timestamp_utc: now,
       provenance: {
         source_id: 'disk-vdisk-01',
+        source_type_desc: 'SimulationBuffer',
         detection_method: 'FragmentedReconstruction',
+        validation_method: 'Bi-Fragment Stitched & PDF Object Catalog & Trailer Parser',
         sector_ranges: [[64, 96], [128, 160]],
+        fragments: [
+          {
+            sequence_index: 0,
+            start_offset: 32768,
+            length_bytes: 16384,
+            sector_start: 64,
+            sector_end: 96,
+          },
+          {
+            sequence_index: 1,
+            start_offset: 65536,
+            length_bytes: 16384,
+            sector_start: 128,
+            sector_end: 160,
+          },
+        ],
         entropy_score: 7.21,
         header_magic: '25 50 44 46',
+        recovery_timestamp_utc: now,
       },
     },
     {
       artifact_id: 'art-003-png',
       source_id: 'disk-vdisk-01',
+      source_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       source_offsets: [[65536, 98304]],
       format: 'Png',
       original_path: 'recovered/art-003_carved.png',
       extracted_path: 'recovered/art-003_carved.png',
       size_bytes: 32768,
       sha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+      optional_blake3: '86a455a5b512c5b36483561a0f81d87f73967d74f2604082260ff0d4e3bb0767',
       validation_status: 'Valid',
+      validation_method: 'PNG Chunk Sequence & CRC32 Validator',
       confidence_score: 0.99,
+      timestamp_utc: now,
       provenance: {
         source_id: 'disk-vdisk-01',
+        source_type_desc: 'SimulationBuffer',
         detection_method: 'ContiguousSignature',
+        validation_method: 'PNG Chunk Sequence & CRC32 Validator',
         sector_ranges: [[128, 192]],
-        entropy_score: 7.91,
+        fragments: [
+          {
+            sequence_index: 0,
+            start_offset: 65536,
+            length_bytes: 32768,
+            sector_start: 128,
+            sector_end: 192,
+          },
+        ],
+        entropy_score: 7.92,
         header_magic: '89 50 4E 47',
+        recovery_timestamp_utc: now,
       },
     },
   ];

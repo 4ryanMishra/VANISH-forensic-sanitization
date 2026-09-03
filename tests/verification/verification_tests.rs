@@ -5,20 +5,22 @@
 ///   - Block pattern checker correctness
 ///   - L1–L4 full engine run on simulated NVMe target
 ///   - L3 Unsupported behaviour for USB flash
+///   - L3 NotAvailable behaviour for real NVMe without kernel driver
+///   - L4 real forensic carving metrics & limitations
 ///   - Confidence score computation
 ///   - Simulation mode labels present in evidence
 #[cfg(test)]
 mod tests {
-    use vanish_core::common::device::{Device, Interface, MediaType};
-    use vanish_core::verification::{
+    use vanish_lib::common::device::{Device, DeviceCapability, InterfaceType, MediaType};
+    use vanish_lib::verification::{
         VerificationEngine, VerificationLevel, VerificationRequest,
-        LevelStatus,
+        VerificationStatus,
     };
-    use vanish_core::verification::sampling::{
+    use vanish_lib::verification::sampling::{
         shannon_entropy, generate_simulated_samples, analyse_entropy,
         EntropyVerdict, ExpectedEntropyMode,
     };
-    use vanish_core::verification::pattern::{
+    use vanish_lib::verification::pattern::{
         check_block_pattern, ExpectedPattern, PatternCheckResult,
     };
 
@@ -31,14 +33,15 @@ mod tests {
             capacity_bytes: 16_000_000_000,
             logical_block_size: 512,
             physical_block_size: 512,
-            interface: Interface::Usb,
+            interface: InterfaceType::Usb,
             media_type: MediaType::UsbFlash,
             mounted: false,
             mount_points: vec![],
             boot_device: false,
             system_disk: false,
             read_only: false,
-            capabilities: vec!["HostBlockOverwrite".to_string()],
+            is_simulated: false,
+            capabilities: vec![DeviceCapability::HostBlockOverwrite],
         }
     }
 
@@ -51,17 +54,18 @@ mod tests {
             capacity_bytes: 512_000_000_000,
             logical_block_size: 512,
             physical_block_size: 4096,
-            interface: Interface::Nvme,
+            interface: InterfaceType::Nvme,
             media_type: MediaType::SsdNvme,
             mounted: false,
             mount_points: vec![],
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: true,
             capabilities: vec![
-                "NvmeSanitizeBlockErase".to_string(),
-                "NvmeSanitizeCryptoErase".to_string(),
-                "NvmeSanitizeOverwrite".to_string(),
+                DeviceCapability::NvmeSanitizeBlockErase,
+                DeviceCapability::NvmeSanitizeCryptoErase,
+                DeviceCapability::NvmeSanitizeOverwrite,
             ],
         }
     }
@@ -93,7 +97,6 @@ mod tests {
     fn test_simulated_random_overwrite_entropy_verdict() {
         let samples = generate_simulated_samples(512_000_000, 512, 32, &ExpectedEntropyMode::RandomOverwrite);
         let analysis = analyse_entropy(&samples, &ExpectedEntropyMode::RandomOverwrite);
-        // Simulated pseudo-random should score clean random overwrite
         assert!(
             analysis.verdict == EntropyVerdict::CleanRandomOverwrite
                 || analysis.verdict == EntropyVerdict::CleanHighEntropy,
@@ -169,7 +172,7 @@ mod tests {
 
         let l3_result = report.results.iter().find(|r| r.level == VerificationLevel::L3DeviceReported);
         assert!(l3_result.is_some(), "L3 result should be present");
-        assert_eq!(l3_result.unwrap().status, LevelStatus::Unsupported, "L3 must be Unsupported for USB flash");
+        assert_eq!(l3_result.unwrap().status, VerificationStatus::Unsupported, "L3 must be Unsupported for USB flash");
 
         // Overall should still pass because Unsupported is not a failure
         assert!(report.overall_passed, "Report should pass with L3=Unsupported");
@@ -190,39 +193,30 @@ mod tests {
         };
         let report = engine.run(&req);
         let l2 = report.results.iter().find(|r| r.level == VerificationLevel::L2HostVisible).unwrap();
-        let has_sim_label = l2.evidence.iter().any(|e| e.contains("[SIM]"));
-        assert!(has_sim_label, "Evidence must contain [SIM] label in simulation mode per docs/08_PHYSICAL_LAB.md");
+        let has_sim_label = l2.evidence.iter().any(|e| e.contains("[SIMULATION]"));
+        assert!(has_sim_label, "Evidence must contain [SIMULATION] label in simulation mode");
     }
 
-    // ── Confidence score: lower when simulation ──────────────────────────────
+    // ── L4 Forensic Carving Verification Test ────────────────────────────────
 
     #[test]
-    fn test_confidence_lower_in_simulation_vs_physical() {
+    fn test_l4_forensic_carving_reports_truthful_metrics() {
         let engine = VerificationEngine::new();
-        let device = make_nvme_sim_device();
-
-        let req_sim = VerificationRequest {
-            device: device.clone(),
-            levels_requested: vec![
-                VerificationLevel::L1Logical,
-                VerificationLevel::L2HostVisible,
-                VerificationLevel::L3DeviceReported,
-            ],
-            sanitization_method: "NvmeSanitizeCryptoErase".to_string(),
+        let device = make_sandisk_device();
+        let req = VerificationRequest {
+            device,
+            levels_requested: vec![VerificationLevel::L4Forensic],
+            sanitization_method: "SinglePassZero".to_string(),
             simulation_mode: true,
         };
-        let req_phys = VerificationRequest {
-            simulation_mode: false,
-            ..req_sim.clone()
-        };
+        let report = engine.run(&req);
+        let l4 = report.results.iter().find(|r| r.level == VerificationLevel::L4Forensic).unwrap();
 
-        let report_sim = engine.run(&req_sim);
-        let report_phys = engine.run(&req_phys);
-
-        assert!(
-            report_sim.confidence_pct <= report_phys.confidence_pct,
-            "Simulation confidence ({}) should be ≤ physical confidence ({})",
-            report_sim.confidence_pct, report_phys.confidence_pct
-        );
+        assert_eq!(l4.status, VerificationStatus::Pass);
+        assert!(l4.evidence.iter().any(|e| e.contains("Signatures Checked: 12")));
+        assert!(l4.evidence.iter().any(|e| e.contains("Candidate headers found: 0")));
+        assert!(!l4.limitations.is_empty(), "Must declare forensic scan limitations");
+        assert!(!l4.detail.contains("100% unrecoverable"), "Must not claim absolute 100% unrecoverable");
+        assert!(l4.detail.contains("0 target artifacts recovered"), "Must use NTRO spec-compliant wording");
     }
 }

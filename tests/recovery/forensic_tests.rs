@@ -214,3 +214,60 @@ fn test_l4_forensic_validation_zero_remnants_after_wipe() {
     }
     assert!(ForensicEngine::validate_target_absence(&wiped_random));
 }
+
+// ── Hardened Recovery Test Fixtures ──────────────────────────────────────────
+
+#[test]
+fn test_contiguous_valid_jpeg_recovery() {
+    let mut jpeg = Vec::new();
+    jpeg.extend_from_slice(&[0xFF, 0xD8]); // SOI
+    jpeg.extend_from_slice(&[0xFF, 0xE0, 0x00, 0x10]); // APP0 marker length 16
+    jpeg.extend_from_slice(b"JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"); // JFIF header
+    jpeg.extend_from_slice(&[0xFF, 0xDB, 0x00, 0x43, 0x00]); // DQT
+    jpeg.extend_from_slice(&[0x08; 64]);
+    jpeg.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x64, 0x00, 0x64, 0x03, 0x01, 0x11, 0x00]); // SOF0: 100x100
+    jpeg.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00]); // SOS
+    jpeg.extend_from_slice(&[0x12, 0x34, 0x56, 0x78]); // Payload scan bytes
+    jpeg.extend_from_slice(&[0xFF, 0xD9]); // EOI
+
+    let outcome = ArtifactValidator::validate_jpeg(&jpeg);
+    assert_eq!(outcome.status, ValidationStatus::Valid);
+    assert!(outcome.confidence_score >= 0.95);
+    assert!(outcome.detail.contains("SOF, SOS, and EOI markers verified"));
+
+    let artifacts = ForensicEngine::scan_bytes(&jpeg, "test_jpeg_stream");
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0].format, ArtifactFormat::Jpeg);
+    assert_eq!(artifacts[0].validation_status, ValidationStatus::Valid);
+    assert!(!artifacts[0].sha256.is_empty());
+    assert_eq!(artifacts[0].provenance.fragments.len(), 1);
+}
+
+#[test]
+fn test_corrupted_png_crc_mismatch_flagged() {
+    let mut png = Vec::new();
+    png.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // Header
+    png.extend_from_slice(&[0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00]);
+    // Intentionally corrupt CRC bytes (expected 0x90, 0x77, 0x53, 0xDE)
+    png.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+    png.extend_from_slice(&[0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]); // IEND
+
+    let outcome = ArtifactValidator::validate_png(&png);
+    assert_eq!(outcome.status, ValidationStatus::Corrupted);
+    assert!(outcome.detail.contains("CRC32 checksum mismatch"));
+}
+
+#[test]
+fn test_false_signature_candidate_rejected() {
+    // Random noise containing SOI magic 0xFFD8 followed by non-marker junk
+    let mut random_noise = vec![0x11, 0x22, 0x33, 0xFF, 0xD8, 0x44, 0x55, 0x66, 0x77, 0x88];
+    random_noise.resize(512, 0xAA);
+
+    let outcome = ArtifactValidator::validate_jpeg(&random_noise[3..]);
+    assert_eq!(outcome.status, ValidationStatus::FalsePositive);
+    assert!(outcome.detail.contains("False candidate"));
+
+    // Scanning the random noise should produce 0 artifacts because false positives are rejected
+    let artifacts = ForensicEngine::scan_bytes(&random_noise, "noise_stream");
+    assert!(artifacts.is_empty(), "False signature candidate must not be reported as a recovered artifact");
+}

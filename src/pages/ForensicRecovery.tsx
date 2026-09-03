@@ -205,18 +205,26 @@ export const ForensicRecovery: React.FC = () => {
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 font-mono">
                       <span>Size: <strong className="text-gray-200">{(art.size_bytes / 1024).toFixed(1)} KB</strong></span>
                       <span>Confidence: <strong className="text-emerald-400">{(art.confidence_score * 100).toFixed(0)}%</strong></span>
-                      <span>Method: <strong className="text-gray-300">{art.provenance.detection_method}</strong></span>
-                      <span>Entropy: <strong className="text-blue-400">{art.provenance.entropy_score.toFixed(2)} bits/byte</strong></span>
-                      <span>Magic: <strong className="text-gray-300">{art.provenance.header_magic}</strong></span>
+                      <span>Detection: <strong className="text-gray-300">{art.provenance?.detection_method || 'Signature'}</strong></span>
+                      <span>Validation: <strong className="text-blue-300">{art.validation_method || art.provenance?.validation_method || 'Syntactic Parser'}</strong></span>
+                      <span>Entropy: <strong className="text-blue-400">{art.provenance?.entropy_score?.toFixed(2) || '0.00'} bits/byte</strong></span>
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 font-mono">
-                      <span>Sector Ranges: {JSON.stringify(art.provenance.sector_ranges)}</span>
-                      <span>Extracted: {art.extracted_path || 'In-Memory Stream'}</span>
+                      <span>Source ID: <strong className="text-gray-300">{art.source_id}</strong></span>
+                      {art.source_hash && <span>Source SHA-256: <strong className="text-gray-400">{art.source_hash.substring(0, 16)}...</strong></span>}
+                      <span>Sectors: {JSON.stringify(art.provenance?.sector_ranges || art.source_offsets)}</span>
                     </div>
 
-                    <div className="text-[11px] text-gray-500 font-mono break-all">
-                      SHA-256 (Canonical Evidence): <strong className="text-gray-400">{art.sha256}</strong>
+                    <div className="space-y-0.5 text-[11px] text-gray-500 font-mono break-all pt-1">
+                      <div>
+                        SHA-256 (Canonical Evidence): <strong className="text-emerald-400">{art.sha256}</strong>
+                      </div>
+                      {art.optional_blake3 && (
+                        <div>
+                          BLAKE3 (Internal Processing): <strong className="text-cyan-400">{art.optional_blake3}</strong>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

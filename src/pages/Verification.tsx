@@ -18,12 +18,17 @@ const LEVEL_WEIGHTS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
+  const norm = status.toUpperCase();
   const cfg = {
-    PASSED: { cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', label: 'PASSED' },
+    PASS: { cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', label: 'PASS' },
+    PASSED: { cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', label: 'PASS' },
     UNSUPPORTED: { cls: 'bg-gray-600/30 text-gray-400 border-gray-600/30', label: 'UNSUPPORTED' },
-    FAILED: { cls: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'FAILED' },
-    ERROR: { cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30', label: 'ERROR' },
-  }[status] ?? { cls: 'bg-gray-600/30 text-gray-400 border-gray-600/30', label: status };
+    NOT_AVAILABLE: { cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30', label: 'NOT AVAILABLE' },
+    INCONCLUSIVE: { cls: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30', label: 'INCONCLUSIVE' },
+    FAIL: { cls: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'FAIL' },
+    FAILED: { cls: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'FAIL' },
+    ERROR: { cls: 'bg-red-500/20 text-red-300 border-red-500/30', label: 'ERROR' },
+  }[norm] ?? { cls: 'bg-gray-600/30 text-gray-400 border-gray-600/30', label: status };
 
   return (
     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cfg.cls}`}>
@@ -34,27 +39,40 @@ function StatusBadge({ status }: { status: string }) {
 
 function LevelCard({ result }: { result: LevelResult }) {
   const [expanded, setExpanded] = useState(false);
+  const norm = result.status.toUpperCase();
 
   const borderColor = {
+    PASS: 'border-emerald-500/30',
     PASSED: 'border-emerald-500/30',
     UNSUPPORTED: 'border-gray-700/50',
+    NOT_AVAILABLE: 'border-amber-500/40',
+    INCONCLUSIVE: 'border-yellow-500/40',
+    FAIL: 'border-red-500/40',
     FAILED: 'border-red-500/40',
-    ERROR: 'border-amber-500/40',
-  }[result.status] ?? 'border-gray-700/50';
+    ERROR: 'border-red-500/40',
+  }[norm] ?? 'border-gray-700/50';
 
   const Icon = {
+    PASS: ShieldCheck,
     PASSED: ShieldCheck,
     UNSUPPORTED: ShieldAlert,
+    NOT_AVAILABLE: AlertCircle,
+    INCONCLUSIVE: AlertCircle,
+    FAIL: ShieldX,
     FAILED: ShieldX,
     ERROR: AlertCircle,
-  }[result.status] ?? ShieldAlert;
+  }[norm] ?? ShieldAlert;
 
   const iconColor = {
+    PASS: 'text-emerald-400',
     PASSED: 'text-emerald-400',
     UNSUPPORTED: 'text-gray-500',
+    NOT_AVAILABLE: 'text-amber-400',
+    INCONCLUSIVE: 'text-yellow-400',
+    FAIL: 'text-red-400',
     FAILED: 'text-red-400',
     ERROR: 'text-amber-400',
-  }[result.status] ?? 'text-gray-500';
+  }[norm] ?? 'text-gray-500';
 
   return (
     <div className={`rounded-xl border ${borderColor} bg-surface overflow-hidden`}>
@@ -84,15 +102,31 @@ function LevelCard({ result }: { result: LevelResult }) {
       </button>
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-gray-800/60">
-          <p className="text-xs text-gray-300 leading-relaxed mt-3">{result.detail}</p>
+          {result.method && (
+            <div className="text-[11px] font-mono text-blue-400 mt-3">
+              <span className="text-gray-500">Method: </span>{result.method}
+            </div>
+          )}
+          <p className="text-xs text-gray-300 leading-relaxed">{result.detail}</p>
           <div className="space-y-1">
-            {result.evidence.map((e, i) => (
+            {result.evidence?.map((e, i) => (
               <div key={i} className="text-[11px] font-mono text-gray-400 flex items-start space-x-2">
                 <span className="text-gray-600 select-none">›</span>
                 <span>{e}</span>
               </div>
             ))}
           </div>
+          {result.limitations && result.limitations.length > 0 && (
+            <div className="pt-2 border-t border-gray-800/40">
+              <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1">Declared Limitations:</div>
+              {result.limitations.map((lim, idx) => (
+                <div key={idx} className="text-[10px] text-gray-400 italic flex items-start space-x-1.5">
+                  <span className="text-amber-500">•</span>
+                  <span>{lim}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -9,13 +9,13 @@
 ///   - trust_scope_note correctly set for session key
 #[cfg(test)]
 mod tests {
-    use vanish_core::audit::{
+    use vanish_lib::audit::{
         AuditChain, CertificateIssuer, OperationSummary, SigningKeypair,
     };
-    use vanish_core::audit::signing::{KeyScope, verify_signature};
-    use vanish_core::common::audit::AuditActor;
-    use vanish_core::common::device::{Device, Interface, MediaType};
-    use vanish_core::verification::{
+    use vanish_lib::audit::signing::{KeyScope, verify_signature};
+    use vanish_lib::common::audit::AuditActor;
+    use vanish_lib::common::device::{Device, DeviceCapability, InterfaceType, MediaType};
+    use vanish_lib::verification::{
         VerificationEngine, VerificationLevel, VerificationReport, VerificationRequest,
     };
 
@@ -28,14 +28,15 @@ mod tests {
             capacity_bytes: 16_000_000_000,
             logical_block_size: 512,
             physical_block_size: 512,
-            interface: Interface::Usb,
+            interface: InterfaceType::Usb,
             media_type: MediaType::UsbFlash,
             mounted: false,
             mount_points: vec![],
             boot_device: false,
             system_disk: false,
             read_only: false,
-            capabilities: vec!["HostBlockOverwrite".to_string()],
+            is_simulated: false,
+            capabilities: vec![DeviceCapability::HostBlockOverwrite],
         }
     }
 
@@ -55,13 +56,78 @@ mod tests {
 
     // ── AuditChain tests ─────────────────────────────────────────────────────
 
+    // ── AuditChain Hardened Proof Tests ─────────────────────────────────────
+
     #[test]
-    fn test_audit_chain_integrity_passes_for_untampered_chain() {
+    fn test_audit_chain_valid_chain_passes() {
         let mut chain = AuditChain::new();
         chain.append_event(
             AuditActor::SystemEngine,
             "TEST_OP_1".to_string(),
-            "device-a".to_string(),
+            "device-sandisk".to_string(),
+            "{\"plan\": \"SinglePassZero\"}".to_string(),
+            "SUCCESS".to_string(),
+            Some("L1, L2 Passed".to_string()),
+            None,
+        );
+        chain.append_event(
+            AuditActor::User("Officer-01".to_string()),
+            "TEST_OP_2".to_string(),
+            "device-sandisk".to_string(),
+            "{\"confirmed\": true}".to_string(),
+            "SUCCESS".to_string(),
+            None,
+            None,
+        );
+        chain.append_event(
+            AuditActor::SystemEngine,
+            "TEST_OP_3".to_string(),
+            "device-sandisk".to_string(),
+            "{\"status\": \"Complete\"}".to_string(),
+            "SUCCESS".to_string(),
+            Some("L4 Verified (0 target artifacts)".to_string()),
+            None,
+        );
+        assert!(chain.verify_integrity(), "Proof 1: Valid untampered chain must pass verification");
+    }
+
+    #[test]
+    fn test_audit_chain_changing_event_breaks_verification() {
+        let mut chain = AuditChain::new();
+        chain.append_event(
+            AuditActor::SystemEngine,
+            "SANITIZATION_PASS_1".to_string(),
+            "device-target".to_string(),
+            "{\"bytes\": 1024}".to_string(),
+            "SUCCESS".to_string(),
+            None,
+            None,
+        );
+        chain.append_event(
+            AuditActor::SystemEngine,
+            "SANITIZATION_PASS_2".to_string(),
+            "device-target".to_string(),
+            "{\"bytes\": 1024}".to_string(),
+            "SUCCESS".to_string(),
+            None,
+            None,
+        );
+
+        let mut events = chain.get_events().to_vec();
+        assert!(AuditChain::verify_events(&events));
+
+        // Tamper with event 0 operation payload
+        events[0].operation = "MALICIOUS_INJECTED_OP".to_string();
+        assert!(!AuditChain::verify_events(&events), "Proof 2: Modifying event data must break chain verification");
+    }
+
+    #[test]
+    fn test_audit_chain_changing_event_order_breaks_verification() {
+        let mut chain = AuditChain::new();
+        chain.append_event(
+            AuditActor::SystemEngine,
+            "STEP_1_DEVICE_SNAPSHOT".to_string(),
+            "device-nvme".to_string(),
             "{}".to_string(),
             "SUCCESS".to_string(),
             None,
@@ -69,38 +135,50 @@ mod tests {
         );
         chain.append_event(
             AuditActor::SystemEngine,
-            "TEST_OP_2".to_string(),
-            "device-a".to_string(),
+            "STEP_2_PURGE_EXECUTE".to_string(),
+            "device-nvme".to_string(),
             "{}".to_string(),
             "SUCCESS".to_string(),
             None,
             None,
         );
-        assert!(chain.verify_integrity(), "Untampered chain must verify");
+
+        let mut events = chain.get_events().to_vec();
+        assert!(AuditChain::verify_events(&events));
+
+        // Swap order of event 0 and event 1
+        events.swap(0, 1);
+        assert!(!AuditChain::verify_events(&events), "Proof 3: Changing event order must break chain verification");
     }
 
     #[test]
-    fn test_audit_chain_hashes_linked() {
+    fn test_audit_chain_changing_previous_event_hash_breaks_verification() {
         let mut chain = AuditChain::new();
-        let e1 = chain.append_event(
+        chain.append_event(
             AuditActor::SystemEngine,
-            "OP_A".to_string(),
+            "OP_GENESIS".to_string(),
             "dev".to_string(),
             "{}".to_string(),
             "SUCCESS".to_string(),
             None,
             None,
         );
-        let e2 = chain.append_event(
+        chain.append_event(
             AuditActor::SystemEngine,
-            "OP_B".to_string(),
+            "OP_FOLLOWUP".to_string(),
             "dev".to_string(),
             "{}".to_string(),
             "SUCCESS".to_string(),
             None,
             None,
         );
-        assert_eq!(e2.previous_event_hash, e1.current_event_hash, "Events must be hash-linked");
+
+        let mut events = chain.get_events().to_vec();
+        assert!(AuditChain::verify_events(&events));
+
+        // Tamper with previous_event_hash of event 1
+        events[1].previous_event_hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef".to_string();
+        assert!(!AuditChain::verify_events(&events), "Proof 4: Modifying previous_event_hash must break chain verification");
     }
 
     // ── Signing tests ────────────────────────────────────────────────────────

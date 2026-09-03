@@ -1,5 +1,6 @@
-use crate::common::recovery::ArtifactFormat;
+use crate::common::recovery::{ArtifactFormat, ValidationStatus};
 use crate::forensic::carving::signature::{get_signature_for_format, KNOWN_SIGNATURES};
+use crate::forensic::validation::ArtifactValidator;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,9 +29,6 @@ pub struct FragmentReconstructor;
 
 impl FragmentReconstructor {
     /// Computes Shannon entropy (0.0 to 8.0 bits/byte) of a byte slice.
-    /// Compressed/encrypted content: ~7.2 to 8.0
-    /// Structured data/text: ~3.0 to 5.5
-    /// Zeroed/sparse blocks: 0.0
     pub fn calculate_entropy(data: &[u8]) -> f64 {
         if data.is_empty() {
             return 0.0;
@@ -55,7 +53,6 @@ impl FragmentReconstructor {
     }
 
     /// Calculates entropy across contiguous blocks (e.g. 512B or 4096B sectors).
-    /// Detects sharp entropy transitions indicating fragment boundaries.
     pub fn block_entropy_map(data: &[u8], block_size: usize) -> Vec<(u64, f64)> {
         let mut map = Vec::new();
         let mut offset = 0u64;
@@ -69,8 +66,7 @@ impl FragmentReconstructor {
         map
     }
 
-    /// Detects orphan fragment candidates (head fragments without complete footers,
-    /// or tail fragments without preceding headers) within a storage stream.
+    /// Detects orphan fragment candidates within a storage stream.
     pub fn detect_orphan_fragments(
         data: &[u8],
         base_offset: u64,
@@ -87,7 +83,6 @@ impl FragmentReconstructor {
             for sig in KNOWN_SIGNATURES {
                 let hlen = sig.header.len();
                 if slice.len() >= hlen && &slice[..hlen] == sig.header {
-                    // Check if footer exists contiguously
                     let mut has_contiguous_footer = false;
                     if let Some(footer) = sig.footer {
                         let flen = footer.len();
@@ -100,7 +95,6 @@ impl FragmentReconstructor {
                         }
                     }
 
-                    // If no contiguous footer found within initial chunk, this is a head fragment candidate
                     if !has_contiguous_footer {
                         let chunk_len = slice.len().min(min_cluster * 4);
                         let frag_bytes = slice[..chunk_len].to_vec();
@@ -119,7 +113,7 @@ impl FragmentReconstructor {
                 }
             }
 
-            // 2. Check for Tail Candidates (matching footer markers at cluster end)
+            // 2. Check for Tail Candidates
             for sig in KNOWN_SIGNATURES {
                 if let Some(footer) = sig.footer {
                     let flen = footer.len();
@@ -147,9 +141,9 @@ impl FragmentReconstructor {
         fragments
     }
 
-    /// Performs Bi-Fragment Gap Analysis:
+    /// Performs Bi-Fragment Gap Analysis with Sector Alignment & Format-Aware Parser Validation:
     /// Takes an orphan head fragment and searches downstream cluster offsets for matching candidate tails.
-    /// Returns the stitched in-memory byte buffer and hypothesis metadata if successful.
+    /// Runs format-aware parser validation on candidate stitched buffers to verify structural validity.
     pub fn stitch_bi_fragment(
         head: &FragmentCandidate,
         search_space: &[u8],
@@ -192,19 +186,23 @@ impl FragmentReconstructor {
                     stitched.extend_from_slice(&head.raw_bytes);
                     stitched.extend_from_slice(&search_space[candidate_tail_start..tail_end]);
 
-                    // Verify stitched size is valid
+                    // Verify stitched size matches format expectations
                     if stitched.len() >= sig.min_size_bytes as usize && (stitched.len() as u64) <= sig.max_size_bytes {
-                        let hypothesis = ReconstructionHypothesis {
-                            head_offset: head.start_offset,
-                            head_len: head.length,
-                            tail_offset: search_base_offset + candidate_tail_start as u64,
-                            tail_len,
-                            gap_clusters: gap,
-                            confidence_score: 0.88 - (gap as f32 * 0.02), // Confidence slightly drops with wider gap
-                            stitched_size: stitched.len(),
-                        };
+                        // Structural parser verification on stitched buffer
+                        let (val_status, val_conf) = ArtifactValidator::validate(&stitched, &head.format);
+                        if val_status == ValidationStatus::Valid || val_status == ValidationStatus::Truncated {
+                            let hypothesis = ReconstructionHypothesis {
+                                head_offset: head.start_offset,
+                                head_len: head.length,
+                                tail_offset: search_base_offset + candidate_tail_start as u64,
+                                tail_len,
+                                gap_clusters: gap,
+                                confidence_score: (0.90 - (gap as f32 * 0.02)) * val_conf,
+                                stitched_size: stitched.len(),
+                            };
 
-                        return Some((stitched, hypothesis));
+                            return Some((stitched, hypothesis));
+                        }
                     }
                 }
             }
@@ -213,3 +211,4 @@ impl FragmentReconstructor {
         None
     }
 }
+

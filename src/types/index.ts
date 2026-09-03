@@ -79,6 +79,44 @@ export interface Device {
   capabilities: DeviceCapability[];
 }
 
+// ── Safety Gate Layer ────────────────────────────────────────────────────────
+
+export type SafetyCheckStatus = 'Pass' | 'Fail' | 'Warning' | 'Unknown' | 'Blocked';
+export type SafetySeverity = 'Info' | 'Warning' | 'High' | 'Critical';
+
+export interface ExecutionTargetSnapshot {
+  stable_id: string;
+  path: string;
+  model: string;
+  serial: string;
+  capacity_bytes: number;
+  logical_block_size: number;
+  physical_block_size: number;
+  interface: InterfaceType;
+  media_type: MediaType;
+  is_simulated: boolean;
+  capabilities: DeviceCapability[];
+  snapshot_timestamp_utc: string;
+  fingerprint_sha256: string;
+}
+
+export interface SafetyCheck {
+  check: string;
+  status: SafetyCheckStatus;
+  severity: SafetySeverity;
+  message: string;
+  evidence: string[];
+}
+
+export interface SafetyEvaluationReport {
+  passed: boolean;
+  target_id: string;
+  checks: SafetyCheck[];
+  target_snapshot?: ExecutionTargetSnapshot;
+  evaluated_at_utc: string;
+  abort_reason?: string;
+}
+
 // ── Sanitization layer ────────────────────────────────────────────────────────
 
 export type SanitizationStandard =
@@ -113,7 +151,7 @@ export interface SanitizationPlan {
   simulation_mode: boolean;
 }
 
-// ── Verification Engine — Step 9 (new backend shape) ─────────────────────────
+// ── Verification Engine (Truthful 4-Level Matrix) ─────────────────────────
 
 export type VerificationLevel =
   | 'L1Logical'
@@ -121,28 +159,40 @@ export type VerificationLevel =
   | 'L3DeviceReported'
   | 'L4Forensic';
 
-export type LevelStatusCode =
-  | 'PASSED'
+export type VerificationStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'NOT_AVAILABLE'
   | 'UNSUPPORTED'
+  | 'INCONCLUSIVE'
+  | 'PASSED'
   | 'FAILED'
   | 'ERROR';
 
-export interface LevelResult {
+export type LevelStatusCode = VerificationStatus;
+
+export interface VerificationResult {
   level: VerificationLevel;
-  status: LevelStatusCode;
+  status: VerificationStatus;
+  method: string;
+  evidence: string[];
+  timestamp: string;
+  limitations: string[];
   confidence_pct: number;
   detail: string;
-  evidence: string[];
 }
+
+export type LevelResult = VerificationResult;
 
 export interface VerificationReport {
   target_id: string;
   levels_executed: VerificationLevel[];
-  results: LevelResult[];
+  results: VerificationResult[];
   overall_passed: boolean;
   confidence_pct: number;
   timestamp_utc: string;
   unsupported_levels: VerificationLevel[];
+  is_simulation?: boolean;
 }
 
 // ── Attestation / Certificate — Step 10 ──────────────────────────────────────
@@ -223,7 +273,8 @@ export type ValidationStatus =
   | 'Valid'
   | 'Corrupted'
   | 'Truncated'
-  | 'Unverified';
+  | 'Unverified'
+  | 'FalsePositive';
 
 export type CarvingMethod =
   | 'ContiguousSignature'
@@ -231,25 +282,41 @@ export type CarvingMethod =
   | 'FilesystemMetadata'
   | 'RawScan';
 
+export interface FragmentRecord {
+  sequence_index: number;
+  start_offset: number;
+  length_bytes: number;
+  sector_start: number;
+  sector_end: number;
+}
+
 export interface ArtifactProvenance {
   source_id: string;
+  source_type_desc: string;
   detection_method: CarvingMethod;
+  validation_method: string;
   sector_ranges: [number, number][];
+  fragments: FragmentRecord[];
   entropy_score: number;
   header_magic: string;
+  recovery_timestamp_utc: string;
 }
 
 export interface RecoveredArtifact {
   artifact_id: string;
   source_id: string;
+  source_hash?: string;
   source_offsets: [number, number][];
   format: ArtifactFormat;
   original_path?: string;
   extracted_path?: string;
   size_bytes: number;
-  sha256: string;
+  sha256: string; // Canonical forensic evidence hash
+  optional_blake3?: string; // High-throughput internal processing hash
   validation_status: ValidationStatus;
+  validation_method: string;
   confidence_score: number;
+  timestamp_utc: string;
   provenance: ArtifactProvenance;
 }
 
@@ -269,6 +336,22 @@ export interface RecoveryResult {
   simulation_mode: boolean;
   execution_time_ms: number;
   summary_notes: string;
+}
+
+// ── Cryptographic Hashing Status ─────────────────────────────────────────────
+
+export interface HashResult {
+  algorithm: 'SHA-256' | 'BLAKE3';
+  digest: string;
+  purpose: 'canonical_evidence' | 'internal_processing';
+  source_label: string;
+  computed_at: string;
+  simulation_mode: boolean;
+}
+
+export interface HashStatusReport {
+  results: HashResult[];
+  backend_available: boolean;
 }
 
 // ── Job tracking ──────────────────────────────────────────────────────────────

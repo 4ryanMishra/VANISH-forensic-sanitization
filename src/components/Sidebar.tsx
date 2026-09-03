@@ -76,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onSelectPage }) =>
       <div className="p-4 m-3 rounded-lg bg-surface-highlight/60 border border-gray-800 text-xs">
         <div className="flex items-center space-x-2 text-emerald-400 font-semibold mb-1">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Safety Gates Armed</span>
+          <span>Safety Invariants Active</span>
         </div>
         <p className="text-gray-400">Boot & System disk writes strictly blocked.</p>
       </div>

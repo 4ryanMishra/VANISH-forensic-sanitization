@@ -37,7 +37,7 @@ impl PngContainerParser {
             }
 
             // Check if this is the IEND chunk
-            if chunk_type == bRIEND" {
+            if chunk_type == b"IEND" {
                 return Some(offset + total_chunk_len);
             }
 
@@ -54,14 +54,14 @@ impl ZipContainerParser {
     /// Traverses a ZIP archive from the local file header (PK\x03\x04) to the End of Central Directory (EOCD: PK\x05\x06).
     /// Returns the exact calculated length in bytes.
     pub fn calculate_length(data: &[u8]) -> Option<usize> {
-        if data.len() < 22 || &data[0..4] != bPK\x03\x04" {
+        if data.len() < 22 || &data[0..4] != b"PK\x03\x04" {
             return None;
         }
 
         // Search backward for EOCD signature (PK\x05\x06) within max 65KB + 22 bytes
         let search_start = if data.len() > 65557 { data.len() - 65557 } else { 0 };
         for i in (search_start..=(data.len() - 22)).rev() {
-            if &data[i..i + 4] == bPK\x05\x06" {
+            if &data[i..i + 4] == b"PK\x05\x06" {
                 let comment_len = u16::from_le_bytes([data[i + 20], data[i + 21]]) as usize;
                 let expected_total_len = i + 22 + comment_len;
                 if expected_total_len <= data.len() {
@@ -107,9 +107,9 @@ impl SqliteContainerParser {
 pub struct JpegContainerParser;
 
 impl JpegContainerParser {
-    /// Scans a JPEG byte stream from SOI (FF Df) until EOI (FF D9).
+    /// Scans a JPEG byte stream from SOI (FF D8) until EOI (FF D9).
     pub fn calculate_length(data: &[u8]) -> Option<usize> {
-        if data.len() < 4 || &data[0..2] != &[{FF, 0xD8] {
+        if data.len() < 4 || &data[0..2] != &[0xFF, 0xD8] {
             return None;
         }
 

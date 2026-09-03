@@ -232,6 +232,8 @@ pub fn scan_and_recover_artifacts(
     };
 
     let artifacts = ForensicEngine::scan_bytes(&data, &source_label);
+    let source_sha256 = hex::encode(sha2::Sha256::digest(&data));
+    let artifact_ids: Vec<String> = artifacts.iter().map(|a| a.artifact_id.clone()).collect();
 
     if let Ok(mut chain) = state.audit_chain.lock() {
         chain.append_event(
@@ -240,7 +242,9 @@ pub fn scan_and_recover_artifacts(
             source_label.clone(),
             serde_json::json!({
                 "source": source_label,
+                "source_sha256": source_sha256,
                 "artifacts_recovered": artifacts.len(),
+                "artifact_ids": artifact_ids,
                 "simulation_mode": simulation_mode,
             }).to_string(),
             "SUCCESS".to_string(),
@@ -299,6 +303,8 @@ pub fn execute_recovery_job(
 
     let artifacts = ForensicEngine::scan_bytes(&data, &source_label);
     let duration = start_time.elapsed().as_millis() as u64;
+    let source_sha256 = hex::encode(sha2::Sha256::digest(&data));
+    let artifact_ids: Vec<String> = artifacts.iter().map(|a| a.artifact_id.clone()).collect();
 
     if let Ok(mut chain) = state.audit_chain.lock() {
         chain.append_event(
@@ -308,7 +314,9 @@ pub fn execute_recovery_job(
             serde_json::json!({
                 "job_id": job.job_id,
                 "source": source_label,
+                "source_sha256": source_sha256,
                 "artifacts_recovered": artifacts.len(),
+                "artifact_ids": artifact_ids,
                 "simulation_mode": is_sim,
             }).to_string(),
             "SUCCESS".to_string(),
@@ -340,6 +348,58 @@ pub fn forensic_recovery_attempt(
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HashResult {
+    pub algorithm: String,
+    pub digest: String,
+    pub purpose: String,
+    pub source_label: String,
+    pub computed_at: String,
+    pub simulation_mode: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HashStatusReport {
+    pub results: Vec<HashResult>,
+    pub backend_available: bool,
+}
+
+#[tauri::command]
+pub fn get_hash_status(state: tauri::State<AppState>) -> Result<HashStatusReport, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut results = Vec::new();
+
+    // 1. SHA-256 Tip Hash from live Audit Chain
+    if let Ok(chain) = state.audit_chain.lock() {
+        let tip_hash = chain.get_tip_hash().to_string();
+        results.push(HashResult {
+            algorithm: "SHA-256".to_string(),
+            digest: tip_hash,
+            purpose: "canonical_evidence".to_string(),
+            source_label: "Audit chain tip hash (Tamper-evident verification)".to_string(),
+            computed_at: now.clone(),
+            simulation_mode: false,
+        });
+    }
+
+    // 2. Real BLAKE3 high-speed hash of session state
+    let session_pub = &state.session_keypair.identity.public_key_hex;
+    let b3_hash = blake3::hash(session_pub.as_bytes()).to_hex().to_string();
+    results.push(HashResult {
+        algorithm: "BLAKE3".to_string(),
+        digest: b3_hash,
+        purpose: "internal_processing".to_string(),
+        source_label: "Session identity BLAKE3 fast hash (High-throughput verification)".to_string(),
+        computed_at: now,
+        simulation_mode: false,
+    });
+
+    Ok(HashStatusReport {
+        results,
+        backend_available: true,
+    })
+}
+
 pub fn run() {
     let state = AppState {
         audit_chain: Mutex::new(AuditChain::new()),
@@ -360,7 +420,8 @@ pub fn run() {
             get_audit_log,
             scan_and_recover_artifacts,
             execute_recovery_job,
-            forensic_recovery_attempt
+            forensic_recovery_attempt,
+            get_hash_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running vanish application");

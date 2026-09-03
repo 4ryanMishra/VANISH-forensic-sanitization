@@ -29,6 +29,7 @@ mod tests {
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: true,
             capabilities: vec![DeviceCapability::NvmeSanitizeCryptoErase],
         };
 
@@ -55,6 +56,7 @@ mod tests {
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: false,
             capabilities: vec![DeviceCapability::HostBlockOverwrite],
         };
 
@@ -118,6 +120,7 @@ mod tests {
             boot_device: false,
             system_disk: false,
             read_only: false,
+            is_simulated: false,
             capabilities: vec![DeviceCapability::HostBlockOverwrite],
         };
 
@@ -138,5 +141,114 @@ mod tests {
         let shredded_bytes = FileShredder::shred_file(&path, 3).unwrap();
         assert!(shredded_bytes > 0);
         assert!(!path.exists(), "Shredded file must be removed from disk");
+    }
+
+    #[test]
+    fn test_real_block_overwrite_on_temp_storage() {
+        let mut tmp_file = NamedTempFile::new().unwrap();
+        let initial_payload = vec![0xABu8; 64 * 1024]; // 64 KB
+        tmp_file.write_all(&initial_payload).unwrap();
+        tmp_file.flush().unwrap();
+        let path = tmp_file.path().to_path_buf();
+
+        // 1. Pass 1: Zero-fill block overwrite
+        let mut progress_called = false;
+        let written = OverwriteEngine::execute_block_overwrite(
+            &path,
+            OverwritePatternType::Fixed(0x00),
+            64 * 1024,
+            4096,
+            |_written, _total| {
+                progress_called = true;
+            },
+        ).expect("Block overwrite should succeed");
+
+        assert_eq!(written, 64 * 1024);
+        assert!(progress_called);
+
+        // Verify contents are strictly 0x00
+        let contents = std::fs::read(&path).unwrap();
+        assert_eq!(contents.len(), 64 * 1024);
+        assert!(contents.iter().all(|&b| b == 0x00), "All bytes must be zeroed");
+
+        // 2. Pass 2: Pseudo-random overwrite
+        OverwriteEngine::execute_block_overwrite(
+            &path,
+            OverwritePatternType::PseudoRandom { seed: Some(42) },
+            64 * 1024,
+            4096,
+            |_written, _total| {},
+        ).expect("Random block overwrite should succeed");
+
+        let random_contents = std::fs::read(&path).unwrap();
+        assert_ne!(random_contents, contents);
+        let has_non_zero = random_contents.iter().any(|&b| b != 0x00);
+        assert!(has_non_zero, "Random pass must write varied bytes");
+    }
+
+    #[test]
+    fn test_nvme_adapter_refuses_usb_flash_device() {
+        use vanish_lib::device::ExecutionTargetSnapshot;
+        use vanish_lib::sanitization::{DeviceSanitizationAdapter, NvmeSanitizeAdapter};
+
+        let usb_dev = Device {
+            stable_id: "dev-sandisk-16g".to_string(),
+            path: "/dev/sdb".to_string(),
+            model: "SanDisk Ultra".to_string(),
+            serial: "4C530001230415116032".to_string(),
+            capacity_bytes: 16_000_000_000,
+            logical_block_size: 512,
+            physical_block_size: 512,
+            interface: InterfaceType::Usb,
+            media_type: MediaType::UsbFlash,
+            mounted: false,
+            mount_points: vec![],
+            boot_device: false,
+            system_disk: false,
+            read_only: false,
+            is_simulated: false,
+            capabilities: vec![DeviceCapability::HostBlockOverwrite],
+        };
+
+        let snapshot = ExecutionTargetSnapshot::from_device(&usb_dev);
+        let plan = PolicyEngine::new().recommend_plan(&usb_dev, SanitizationStandard::Nist80088Purge);
+
+        let adapter = NvmeSanitizeAdapter;
+        assert!(!adapter.can_execute(&plan, &snapshot), "NvmeSanitizeAdapter must refuse USB flash snapshot");
+    }
+
+    #[test]
+    fn test_nvme_adapter_unsupported_on_real_hardware_without_driver() {
+        use vanish_lib::device::ExecutionTargetSnapshot;
+        use vanish_lib::sanitization::{DeviceSanitizationAdapter, NvmeSanitizeAdapter};
+
+        let real_nvme_dev = Device {
+            stable_id: "dev-nvme-physical".to_string(),
+            path: "/dev/nvme0n1".to_string(),
+            model: "Samsung 980 Pro".to_string(),
+            serial: "S5GXNF0R123456".to_string(),
+            capacity_bytes: 1_000_000_000_000,
+            logical_block_size: 512,
+            physical_block_size: 512,
+            interface: InterfaceType::Nvme,
+            media_type: MediaType::SsdNvme,
+            mounted: false,
+            mount_points: vec![],
+            boot_device: false,
+            system_disk: false,
+            read_only: false,
+            is_simulated: false, // REAL hardware
+            capabilities: vec![DeviceCapability::NvmeSanitizeCryptoErase],
+        };
+
+        let snapshot = ExecutionTargetSnapshot::from_device(&real_nvme_dev);
+        let mut plan = PolicyEngine::new().recommend_plan(&real_nvme_dev, SanitizationStandard::Nist80088Purge);
+        plan.simulation_mode = false;
+
+        let adapter = NvmeSanitizeAdapter;
+        let result = adapter.execute(&plan, &snapshot, &real_nvme_dev, &mut |_pct, _phase| {});
+        assert!(result.is_err(), "Must return UNSUPPORTED error in real mode rather than pretending");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("UNSUPPORTED HARDWARE PRIMITIVE") || err_msg.contains("Real NVMe hardware sanitize"));
     }
 }

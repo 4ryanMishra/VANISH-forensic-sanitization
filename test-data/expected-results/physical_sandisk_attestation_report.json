@@ -1,0 +1,54 @@
+{
+  "report_id": "REP-PHYSICAL-SANDISK-1788456863",
+  "generated_at_utc": "2026-09-03 17:34:23 UTC",
+  "target_device": {
+    "physical_path": "\\\\.\\PhysicalDrive1",
+    "volume_path": "E:\\",
+    "model": "SanDisk Cruzer Blade (E:)",
+    "serial": "4C530001210704113003",
+    "capacity_bytes": 15664676864,
+    "transport": "USB",
+    "is_system_disk": false
+  },
+  "sanitization_execution": {
+    "method": "Host Block Overwrite",
+    "standard_applied": "NIST SP 800-88 Rev. 2 (Clear)",
+    "bytes_overwritten": 67108864,
+    "duration_seconds": 13.53,
+    "flush_status": "FLUSH_FAILED (Error 21)",
+    "errors": []
+  },
+  "verification_results": {
+    "overall_passed": true,
+    "forensic_confidence_pct": 95,
+    "levels": [
+      {
+        "level": "L1 Logical Filesystem",
+        "status": "PASS",
+        "detail": "Partition directory headers wiped; volume unmounted and unformatted."
+      },
+      {
+        "level": "L2 Host-Visible Blocks",
+        "status": "PASS",
+        "detail": "Sampled 67,108,864 bytes across head, middle, and tail LBAs. Non-zero bytes: 0."
+      },
+      {
+        "level": "L3 Device-Reported Status",
+        "status": "UNSUPPORTED",
+        "detail": "USB Mass Storage BOT interface does not provide native NVMe sanitize controller status log."
+      },
+      {
+        "level": "L4 Deep Forensic Carving",
+        "status": "PASS",
+        "detail": "Deep signature carving scan recovered 0 target artifacts.",
+        "artifacts_recovered": 0
+      }
+    ]
+  },
+  "audit_ledger": {
+    "audit_events_count": 4,
+    "chain_tip_hash": "563d6151ddb97e1532ed3b7b02eda98b828a85977cc0c73012c51e050df8af7b",
+    "chain_integrity_verified": true
+  },
+  "attestation_declaration": "It is hereby certified that the target storage media underwent controlled host-level raw block sanitization and post-wipe deep carving validation. No target artifact or recognizable filesystem remnants were recovered by the specified VANISH forensic validation procedure."
+}

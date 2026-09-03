@@ -1,12 +1,31 @@
-import React from 'react';
-import { HardDrive, ShieldCheck, FileSearch, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { HardDrive, ShieldCheck, AlertTriangle, ArrowUpRight, Cpu } from 'lucide-react';
 import { PageId } from '../components/Sidebar';
+import { fetchDevices, fetchAuditLog } from '../services/api';
+import { Device, AuditEvent } from '../types';
 
 interface DashboardProps {
   onNavigate: (page: PageId) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    Promise.all([fetchDevices(), fetchAuditLog()]).then(([devs, logs]) => {
+      setDevices(devs);
+      setAuditEvents(logs);
+      setLoading(false);
+    });
+  }, []);
+
+  const systemDisksCount = devices.filter((d) => d.system_disk || d.boot_device).length;
+  const disposableCount = devices.filter((d) => !d.system_disk && !d.boot_device).length;
+  const simCount = devices.filter((d) => d.is_simulated).length;
+  const isAllSim = simCount > 0 && simCount === devices.length;
+
   return (
     <div className="p-8 space-y-6">
       {/* Top Metric Cards */}
@@ -16,26 +35,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <span className="text-xs font-medium uppercase tracking-wider">Detected Targets</span>
             <HardDrive className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-white">3 Devices</div>
-          <div className="text-xs text-emerald-400 mt-1">1 Isolated Disposable Lab Target</div>
+          <div className="text-2xl font-bold text-white">
+            {loading ? '...' : `${devices.length} Devices`}
+          </div>
+          <div className="text-xs text-emerald-400 mt-1">
+            {loading ? 'Scanning bus...' : `${disposableCount} Disposable / Lab Target${disposableCount !== 1 ? 's' : ''}`}
+          </div>
         </div>
 
         <div className="p-5 rounded-xl bg-surface border border-gray-800 shadow-sm">
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Safety Status</span>
+            <span className="text-xs font-medium uppercase tracking-wider">Safety Gate</span>
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-2xl font-bold text-emerald-400">Arming Active</div>
-          <div className="text-xs text-gray-400 mt-1">Host system drives write-locked</div>
+          <div className="text-2xl font-bold text-emerald-400">
+            {systemDisksCount > 0 ? `${systemDisksCount} Protected` : 'Enforced'}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            Host system & boot disks write-locked
+          </div>
         </div>
 
         <div className="p-5 rounded-xl bg-surface border border-gray-800 shadow-sm">
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Recovery Pipeline</span>
-            <FileSearch className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-medium uppercase tracking-wider">Environment Mode</span>
+            <Cpu className="w-4 h-4 text-purple-400" />
           </div>
-          <div className="text-2xl font-bold text-white">Read-Only</div>
-          <div className="text-xs text-purple-400 mt-1">L1–L4 Verification Ready</div>
+          <div className="text-2xl font-bold text-white">
+            {isAllSim ? (
+              <span className="text-amber-400 text-lg">SIMULATION</span>
+            ) : simCount > 0 ? (
+              <span className="text-blue-400 text-lg">HYBRID</span>
+            ) : (
+              <span className="text-emerald-400 text-lg">REAL HARDWARE</span>
+            )}
+          </div>
+          <div className="text-xs text-purple-400 mt-1">
+            L1–L4 Multi-Level Matrix
+          </div>
         </div>
 
         <div className="p-5 rounded-xl bg-surface border border-gray-800 shadow-sm">
@@ -43,8 +80,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <span className="text-xs font-medium uppercase tracking-wider">Audit Chain</span>
             <ShieldCheck className="w-4 h-4 text-indigo-400" />
           </div>
-          <div className="text-2xl font-bold text-white">Tamper-Proof</div>
-          <div className="text-xs text-indigo-400 mt-1">SHA-256 Merkle Chained</div>
+          <div className="text-2xl font-bold text-white">
+            {auditEvents.length} Events
+          </div>
+          <div className="text-xs text-indigo-400 mt-1">
+            SHA-256 Hash-Linked
+          </div>
         </div>
       </div>
 

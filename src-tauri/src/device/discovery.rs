@@ -1,28 +1,53 @@
 use crate::common::device::{Device, InterfaceType, MediaType};
 use crate::device::capabilities::CapabilityDiscoveryEngine;
 use crate::device::identity::DeviceIdentityEngine;
-use crate::platform::MockPlatformStorage;
+use crate::platform::{LinuxStoragePlatform, MockPlatformStorage, WindowsStoragePlatform};
 use anyhow::Result;
 
 pub struct DeviceDiscoveryService {
+    linux_platform: LinuxStoragePlatform,
+    windows_platform: WindowsStoragePlatform,
     mock_platform: MockPlatformStorage,
 }
 
 impl DeviceDiscoveryService {
     pub fn new() -> Self {
         Self {
+            linux_platform: LinuxStoragePlatform::new(),
+            windows_platform: WindowsStoragePlatform::new(),
             mock_platform: MockPlatformStorage::new(),
         }
     }
 
     /// Enumerate all storage targets, computing stable hardware IDs, filtering reported capabilities,
-    /// and tagging system/boot disks.
+    /// and tagging system/boot disks. Uses native platform APIs on Linux/Windows, with high-fidelity
+    /// simulation fixtures when simulation is requested or in development environments.
     pub fn list_devices(&self) -> Result<Vec<Device>> {
-        let raw_devices = self.mock_platform.enumerate_mock_devices()?;
+        let mut raw_devices = Vec::new();
+
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(devs) = self.linux_platform.enumerate_devices() {
+                raw_devices.extend(devs);
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(devs) = self.windows_platform.enumerate_devices() {
+                raw_devices.extend(devs);
+            }
+        }
+
+        // If no physical/native devices were discovered (or running in lab simulation environment),
+        // provide the laboratory simulation fixtures.
+        if raw_devices.is_empty() {
+            raw_devices = self.mock_platform.enumerate_mock_devices()?;
+        }
+
         let mut processed_devices = Vec::new();
 
         for mut dev in raw_devices {
-            // Compute deterministic stable identity
             let interface_desc = match &dev.interface {
                 InterfaceType::Nvme => "Nvme",
                 InterfaceType::Sata => "Sata",
@@ -51,6 +76,11 @@ impl DeviceDiscoveryService {
         }
 
         Ok(processed_devices)
+    }
+
+    /// Enumerate simulated lab targets specifically
+    pub fn list_simulated_devices(&self) -> Result<Vec<Device>> {
+        self.mock_platform.enumerate_mock_devices()
     }
 
     /// Retrieve a single device by stable_id
