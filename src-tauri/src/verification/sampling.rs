@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn test_entropy_high_random() {
         // Vary bytes to produce high entropy
-        let data: Vec<u8> = (0u16..512).map(|i| (i.wrapping_mul(251) as u8)).collect();
+        let data: Vec<u8> = (0u16..512).map(|i| i.wrapping_mul(251) as u8).collect();
         let e = shannon_entropy(&data);
         assert!(e > 7.0, "Varied block entropy should be >7.0, got {e}");
     }
