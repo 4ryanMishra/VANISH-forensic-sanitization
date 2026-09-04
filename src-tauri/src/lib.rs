@@ -64,13 +64,19 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn execute_sanitization_plan(
-        state: tauri::State<AppState>,
+    pub async fn execute_sanitization_plan(
+        state: tauri::State<'_, AppState>,
         plan: SanitizationPlan,
         device: Device,
     ) -> Result<ExecutionSummary, String> {
-        let summary = SanitizationAdapter::execute(&plan, &device, |_pct, _phase| {})
-            .map_err(|e| e.to_string())?;
+        let plan_clone = plan.clone();
+        let dev_clone = device.clone();
+        let summary = tauri::async_runtime::spawn_blocking(move || {
+            SanitizationAdapter::execute(&plan_clone, &dev_clone, |_pct, _phase| {})
+        })
+        .await
+        .map_err(|e| format!("Async worker error: {}", e))?
+        .map_err(|e| e.to_string())?;
 
         if let Ok(mut chain) = state.audit_chain.lock() {
             chain.append_event(
@@ -88,8 +94,8 @@ pub mod commands {
     }
 
     #[tauri::command]
-    pub fn run_verification(
-        state: tauri::State<AppState>,
+    pub async fn run_verification(
+        state: tauri::State<'_, AppState>,
         device: Device,
         sanitization_method: String,
         simulation_mode: bool,
@@ -106,8 +112,12 @@ pub mod commands {
             simulation_mode,
         };
 
-        let engine = VerificationEngine::new();
-        let report = engine.run(&req);
+        let report = tauri::async_runtime::spawn_blocking(move || {
+            let engine = VerificationEngine::new();
+            engine.run(&req)
+        })
+        .await
+        .map_err(|e| format!("Async verification error: {}", e))?;
 
         if let Ok(mut chain) = state.audit_chain.lock() {
             chain.append_event(
