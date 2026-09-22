@@ -12,7 +12,7 @@
   },
   "sanitization_execution": {
     "method": "Host Block Overwrite",
-    "standard_applied": "NIST SP 800-88 Rev 1 (Clear)",
+    "standard_applied": "NIST SP 800-88 Rev. 1-derived Clear / IEEE 2883-2022 Overwrite",
     "bytes_overwritten": 67108864,
     "duration_seconds": 13.53,
     "flush_status": "FLUSH_FAILED (Error 21)",

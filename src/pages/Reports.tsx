@@ -41,7 +41,7 @@ export const Reports: React.FC = () => {
       report_type: reportType,
       generated_at: new Date().toISOString(),
       target_device: selectedDevice,
-      compliance_standards: ['NIST SP 800-88 Rev 1', 'ISO/IEC 27040:2024', 'IEEE 2883-2022'],
+      compliance_standards: ['NIST SP 800-88 Rev. 2 (Guidance Aligned)', 'IEEE 2883-2022', 'ISO/IEC 27040:2024'],
       verification_report: verificationReport || 'Verification not yet executed',
       audit_chain_tip_hash: tipHash,
       audit_chain_events_count: auditEvents.length,
@@ -191,7 +191,7 @@ export const Reports: React.FC = () => {
           <div className="space-y-1">
             <span className="text-charcoal/50 uppercase text-[10px]">Standard Applied</span>
             <div className="text-charcoal font-bold">
-              {reportType === 'sanitization' ? 'NIST SP 800-88 Rev 1 (Clear)' : 'DFIR NIST SP 800-86 Forensic Carving'}
+              {reportType === 'sanitization' ? 'NIST SP 800-88 Rev. 1-derived Clear / IEEE 2883-2022 Overwrite' : 'DFIR NIST SP 800-86 Forensic Carving'}
             </div>
           </div>
           <div className="space-y-1">

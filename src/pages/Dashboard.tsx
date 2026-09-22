@@ -133,7 +133,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             <p className="text-xs text-charcoal-muted">Sequential evidence and assurance workflow</p>
           </div>
           <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-surface-subtle border border-border text-charcoal-secondary">
-            NIST SP 800-88 Rev 1 / IEEE 2883-2022
+            NIST SP 800-88 Rev. 2 Aligned / IEEE 2883-2022
           </span>
         </div>
 

@@ -389,10 +389,10 @@ export const Sanitization: React.FC = () => {
               onChange={(e) => setStandard(e.target.value as SanitizationStandard)}
               className="w-full bg-white border border-border rounded-lg px-3 py-2.5 text-xs text-charcoal focus:outline-none focus:border-vermilion font-mono shadow-subtle"
             >
-              <option value="Nist80088Purge">NIST SP 800-88 Rev 1 — Purge (Hardware Erase / Crypto Erase)</option>
-              <option value="Nist80088Clear">NIST SP 800-88 Rev 1 — Clear (Controlled Logical Overwrite)</option>
+              <option value="Nist80088Clear">NIST SP 800-88 Rev. 1-derived Clear (Host Logical Overwrite | IEEE 2883-2022 Overwrite)</option>
+              <option value="Nist80088Purge">NIST SP 800-88 Rev. 1-derived Purge (Hardware Sanitize / Crypto Erase | IEEE 2883-2022 Purge)</option>
+              <option value="Ieee2883Purge">IEEE 2883-2022 — Purge (Solid-State Block/Crypto Erase)</option>
               <option value="Dod522022M3Pass">DoD 5220.22-M (3-Pass Multi-Pattern Stream)</option>
-              <option value="Ieee2883Purge">IEEE 2883-2022 — Purge</option>
               <option value="SinglePassZero">Single-Pass Zero Fill (0x00 Stream)</option>
               <option value="SinglePassRandom">Single-Pass Pseudo-Random Stream</option>
             </select>

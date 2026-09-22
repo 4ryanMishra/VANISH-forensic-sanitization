@@ -186,7 +186,7 @@ def test_complete_14_stage_e2e_workflow():
 
         plan = {
             "target_id": target_dev.path,
-            "standard": "NIST SP 800-88 Rev 1 (Clear)",
+            "standard": "NIST SP 800-88 Rev. 1-derived Clear / IEEE 2883-2022 Overwrite",
             "method": "Single-Pass Zero Fill (0x00)",
             "passes": 1,
             "simulation_mode": False,
