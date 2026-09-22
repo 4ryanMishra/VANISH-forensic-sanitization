@@ -192,7 +192,7 @@ export const Verification: React.FC = () => {
     setReport(null);
     setCert(null);
     try {
-      const r = await runVerification(selectedDevice, method, true);
+      const r = await runVerification(selectedDevice, method, selectedDevice.is_simulated);
       setReport(r);
     } finally {
       setIsRunning(false);
@@ -208,7 +208,7 @@ export const Verification: React.FC = () => {
         method,
         1,
         selectedDevice.capacity_bytes,
-        true,
+        selectedDevice.is_simulated,
         'SinglePassZero'
       );
       setCert(c);
