@@ -186,7 +186,7 @@ def test_complete_14_stage_e2e_workflow():
 
         plan = {
             "target_id": target_dev.path,
-            "standard": "NIST SP 800-88 Rev. 2 (Clear)",
+            "standard": "NIST SP 800-88 Rev 1 (Clear)",
             "method": "Single-Pass Zero Fill (0x00)",
             "passes": 1,
             "simulation_mode": False,
@@ -221,7 +221,7 @@ def test_complete_14_stage_e2e_workflow():
         chain = AuditChain(db_path=audit_db_path)
         chain.append_event("DEVICE_DISCOVERY", target_dev.path, "SUCCESS", "Target virtual image discovered")
         chain.append_event("FORENSIC_CARVE_PRE", target_dev.path, "SUCCESS", f"Recovered {len(recovered_artifacts)} artifacts pre-wipe")
-        chain.append_event("SANITIZATION_EXECUTE", target_dev.path, "SUCCESS", "NIST SP 800-88 Rev. 2 Clear pass 1 complete")
+        chain.append_event("SANITIZATION_EXECUTE", target_dev.path, "SUCCESS", "NIST SP 800-88 Rev 1 Clear pass 1 complete")
         chain.append_event("VERIFICATION_EXECUTE", target_dev.path, "SUCCESS", "L1-L4 Multi-Level Verified (0 artifacts)")
 
         # ----------------------------------------------------------------------

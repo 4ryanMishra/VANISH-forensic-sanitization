@@ -303,7 +303,7 @@ def run_physical_demo(target_drive: str = "E:\\", volume_raw: str = "\\\\.\\E:")
         },
         "sanitization_execution": {
             "method": "Host Block Overwrite",
-            "standard_applied": "NIST SP 800-88 Rev. 2 (Clear)",
+            "standard_applied": "NIST SP 800-88 Rev 1 (Clear)",
             "bytes_overwritten": bytes_written,
             "duration_seconds": round(duration, 2),
             "flush_status": flush_status,
