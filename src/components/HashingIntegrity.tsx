@@ -1,127 +1,129 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HashStatusReport, HashResult } from '../types';
 import { fetchHashStatus } from '../services/api';
+import { ShieldCheck, Zap, Info } from 'lucide-react';
 
-export function HashingIntegrity() {
+export const HashingIntegrity: React.FC = () => {
   const [status, setStatus] = useState<HashStatusReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    fetchHashStatus().then(res => {
+    fetchHashStatus().then((res) => {
       if (mounted) {
         setStatus(res);
         setLoading(false);
       }
     });
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading) {
-    return <div className="text-gray-400 text-sm animate-pulse">Loading hashing integrity data...</div>;
+    return (
+      <div className="p-4 rounded-lg bg-surface border border-border text-charcoal-muted text-xs font-mono animate-pulse">
+        Polling native cryptographic hashing telemetry...
+      </div>
+    );
   }
 
   if (!status) return null;
 
-  const sha256Results = status.results.filter(r => r.algorithm === 'SHA-256');
-  const blake3Results = status.results.filter(r => r.algorithm === 'BLAKE3');
+  const sha256Results = status.results.filter((r) => r.algorithm === 'SHA-256');
+  const blake3Results = status.results.filter((r) => r.algorithm === 'BLAKE3');
 
   return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="bg-surface border border-border rounded-lg p-6 space-y-6 font-sans">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            Cryptographic Integrity Architecture
-          </h2>
-          <p className="text-sm text-slate-400 mt-1">
-            VANISH utilizes dual hashing algorithms for distinct, strictly separated purposes.
-          </p>
+          <div className="inline-flex items-center space-x-1.5 text-xs font-mono uppercase tracking-wider text-charcoal-muted mb-1">
+            <span>Cryptographic Hashing Architecture</span>
+          </div>
+          <h3 className="text-base font-semibold text-charcoal">
+            Strict Separation: Canonical Evidence vs. High-Throughput Processing
+          </h3>
         </div>
         {!status.backend_available && (
-          <div className="bg-amber-900/50 text-amber-300 border border-amber-700/50 px-3 py-1 rounded text-xs font-medium uppercase tracking-wider">
-            Simulation Mode
-          </div>
+          <span className="px-2.5 py-1 rounded bg-amber-surface text-amber-dark border border-amber-border text-xs font-mono font-semibold">
+            Simulation Fallback
+          </span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* SHA-256 Evidence Column */}
-        <div className="bg-slate-800 rounded border border-slate-600 p-4">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-700 pb-2">
-            <div>
-              <h3 className="text-emerald-400 font-medium text-lg flex items-center gap-2">
-                SHA-256
-                <span className="bg-emerald-900/50 text-emerald-300 text-[10px] px-2 py-0.5 rounded uppercase font-bold tracking-widest">
-                  Evidence
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">Canonical hash for artifact identity and report verification.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* SHA-256 Canonical Evidence */}
+        <div className="p-4 rounded-lg bg-verified-surface/30 border border-verified-border space-y-3">
+          <div className="flex items-center justify-between border-b border-verified-border/60 pb-2">
+            <div className="flex items-center space-x-2 text-verified-dark font-semibold text-sm">
+              <ShieldCheck className="w-4 h-4 text-verified" />
+              <span>SHA-256 (Canonical Evidence)</span>
             </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-verified-surface text-verified-dark font-bold border border-verified-border">
+              Standard
+            </span>
           </div>
-          
-          <div className="space-y-4">
+          <p className="text-xs text-charcoal-secondary leading-relaxed">
+            Sole standard for digital forensics artifact identification, disk image checksums, tamper-evident audit chains, and court-admissible certificate attestation.
+          </p>
+
+          <div className="space-y-2">
             {sha256Results.length === 0 ? (
-              <div className="text-slate-500 text-sm italic">No recent SHA-256 computations</div>
+              <div className="text-xs text-charcoal-muted font-mono italic">No active SHA-256 digests</div>
             ) : (
-              sha256Results.map((res, i) => <HashResultRow key={i} result={res} />)
+              sha256Results.map((res, i) => <HashResultCard key={i} result={res} />)
             )}
           </div>
         </div>
 
-        {/* BLAKE3 Speed Column */}
-        <div className="bg-slate-800 rounded border border-slate-600 p-4">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-700 pb-2">
-            <div>
-              <h3 className="text-cyan-400 font-medium text-lg flex items-center gap-2">
-                BLAKE3
-                <span className="bg-cyan-900/50 text-cyan-300 text-[10px] px-2 py-0.5 rounded uppercase font-bold tracking-widest">
-                  Processing
-                </span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">High-throughput internal hash for storage scans and dedup.</p>
+        {/* BLAKE3 High Throughput */}
+        <div className="p-4 rounded-lg bg-telemetry-surface/30 border border-telemetry-border space-y-3">
+          <div className="flex items-center justify-between border-b border-telemetry-border/60 pb-2">
+            <div className="flex items-center space-x-2 text-telemetry-dark font-semibold text-sm">
+              <Zap className="w-4 h-4 text-telemetry" />
+              <span>BLAKE3 (Internal Processing)</span>
             </div>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-telemetry-surface text-telemetry-dark font-bold border border-telemetry-border">
+              Performance
+            </span>
           </div>
+          <p className="text-xs text-charcoal-secondary leading-relaxed">
+            Optimized tree-hashing algorithm utilized strictly for multi-gigabyte memory scans, cluster deduplication, cache keys, and internal state machine speed.
+          </p>
 
-          <div className="space-y-4">
+          <div className="space-y-2">
             {blake3Results.length === 0 ? (
-              <div className="text-slate-500 text-sm italic">No recent BLAKE3 computations</div>
+              <div className="text-xs text-charcoal-muted font-mono italic">No active BLAKE3 digests</div>
             ) : (
-              blake3Results.map((res, i) => <HashResultRow key={i} result={res} />)
+              blake3Results.map((res, i) => <HashResultCard key={i} result={res} />)
             )}
           </div>
         </div>
       </div>
-      
-      <div className="text-xs text-slate-500 bg-slate-900/50 p-3 rounded border border-slate-700/50 flex items-start gap-2">
-        <svg className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <p>
-          <strong className="text-slate-300">Important:</strong> BLAKE3 is utilized exclusively for performance-critical internal operations. It does not replace SHA-256 and is not presented as a "more secure" alternative. SHA-256 remains the sole canonical standard for all forensic evidence verification.
+
+      <div className="flex items-start space-x-2 text-[11px] text-charcoal-muted bg-surface-subtle p-3 rounded border border-border">
+        <Info className="w-4 h-4 text-charcoal-muted shrink-0 mt-0.5" />
+        <p className="leading-relaxed">
+          <strong className="text-charcoal-secondary font-semibold">Integrity Rule:</strong> BLAKE3 does not replace SHA-256 and is not presented as a "more secure" alternative. SHA-256 remains the sole canonical standard for all forensic evidence verification.
         </p>
       </div>
     </div>
   );
-}
+};
 
-function HashResultRow({ result }: { result: HashResult }) {
+const HashResultCard: React.FC<{ result: HashResult }> = ({ result }) => {
   return (
-    <div className="bg-slate-900/80 rounded p-3 border border-slate-700">
-      <div className="flex justify-between items-start mb-1.5">
-        <span className="text-xs font-medium text-slate-300">{result.source_label}</span>
-        <span className="text-[10px] text-slate-500">{new Date(result.computed_at).toLocaleTimeString()}</span>
+    <div className="p-3 bg-surface rounded border border-border space-y-1.5 font-mono text-xs">
+      <div className="flex justify-between items-start text-[11px]">
+        <span className="font-semibold text-charcoal">{result.source_label}</span>
+        <span className="text-charcoal-muted">{new Date(result.computed_at).toLocaleTimeString()}</span>
       </div>
-      <div className="font-mono text-xs break-all text-slate-400 bg-black/40 p-2 rounded">
-        {result.simulation_mode ? (
-          <span className="text-amber-500/70 line-through mr-2" title="Simulated value">
-            [SIMULATED]
-          </span>
-        ) : null}
+      <div className="text-[11px] text-charcoal-secondary bg-surface-subtle p-2 rounded border border-border-subtle break-all font-mono">
+        {result.simulation_mode && (
+          <span className="text-amber font-semibold mr-1.5">[SIMULATION]</span>
+        )}
         {result.digest}
       </div>
     </div>
   );
-}
+};

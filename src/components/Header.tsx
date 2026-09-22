@@ -1,28 +1,38 @@
 import React from 'react';
-import { ShieldCheck, Cpu } from 'lucide-react';
+import { Cpu, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   title: string;
   subtitle: string;
+  activeTargetDesc?: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ title, subtitle }) => {
+export const Header: React.FC<HeaderProps> = ({ title, subtitle, activeTargetDesc }) => {
   return (
-    <header className="h-16 border-b border-gray-800 bg-surface/50 backdrop-blur px-8 flex items-center justify-between">
-      <div>
-        <h2 className="text-lg font-semibold text-white tracking-wide">{title}</h2>
-        <p className="text-xs text-gray-400">{subtitle}</p>
+    <header className="h-16 border-b border-border bg-surface px-8 flex items-center justify-between select-none font-sans shrink-0">
+      <div className="flex items-center space-x-4">
+        <div>
+          <h2 className="text-sm font-semibold text-charcoal tracking-tight">{title}</h2>
+          <p className="text-xs text-charcoal-muted font-mono">{subtitle}</p>
+        </div>
       </div>
 
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-surface-highlight border border-gray-700/60 text-xs">
-          <Cpu className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-gray-300">Engine: Native Rust</span>
+      <div className="flex items-center space-x-3">
+        {activeTargetDesc && (
+          <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded bg-surface-subtle border border-border text-xs font-mono">
+            <span className="text-charcoal-muted">Target:</span>
+            <span className="font-semibold text-charcoal">{activeTargetDesc}</span>
+          </div>
+        )}
+
+        <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-surface-subtle border border-border text-xs font-mono text-charcoal-secondary">
+          <Cpu className="w-3.5 h-3.5 text-telemetry" />
+          <span>Rust Native Core</span>
         </div>
 
-        <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-400">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          <span>Attestation: SHA-256 Chained</span>
+        <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-verified-surface border border-verified-border text-xs font-mono text-verified-dark font-semibold">
+          <ShieldCheck className="w-3.5 h-3.5 text-verified" />
+          <span>SHA-256 Chain</span>
         </div>
       </div>
     </header>
